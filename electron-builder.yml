@@ -1,0 +1,43 @@
+# electron-builder 配置：先保证「装得上、双击能起」，签名与自动更新都不在测试版范围内。
+appId: com.qoder.math-modeling-tutor
+productName: 数学建模教练
+copyright: 教学用途测试版
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+
+# 主进程按 process.resourcesPath/<子目录> 找这些运行时资源，开发态回退到仓库目录，
+# 所以这里的 to 必须和 src/main 里那几处 join(process.resourcesPath, ...) 对齐。
+extraResources:
+  - from: resources/latex
+    to: latex
+  - from: resources/compliance
+    to: compliance
+  - from: resources/icon
+    to: icon
+  - from: sandbox
+    to: sandbox
+
+# 复用 node_modules/electron/dist 里已经下好的二进制，避免构建时再去拉 electron 压缩包
+electronDist: node_modules/electron/dist
+
+win:
+  icon: resources/icon/icon.ico
+  target:
+    - nsis
+    - portable
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  artifactName: ${name}-setup-${version}.${ext}
+
+portable:
+  artifactName: ${name}-portable-${version}.${ext}

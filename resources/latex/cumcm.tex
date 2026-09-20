@@ -1,0 +1,252 @@
+% ============================================================
+% 全国大学生数学建模竞赛（国赛）中文论文模板 · XeLaTeX
+% ------------------------------------------------------------
+% 这份模板只给你「结构 + 空位」，不给你任何可粘贴的正文章句。
+% 每一节的标题旁边注明了它对应左边的哪个阶段：把任务卡里填过的
+% 内容搬进来，才是这篇论文你自己的东西。
+%
+% 编译方式：xelatex 两遍（本应用点「编译」即自动完成）。
+% 图形直接用沙箱产物文件名，例如 \includegraphics{curve.png}。
+% 承诺页与编号页按赛区要求单独装订，不进这个文件。
+% ============================================================
+\documentclass[12pt,a4paper,UTF8]{ctexart}
+
+% 国赛格式规范要求数字与西文用 Times New Roman。字体探测不到就退回默认，
+% 别让一台没装该字体的机器直接编译失败。
+\IfFontExistsTF{Times New Roman}{\setmainfont{Times New Roman}}{}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\geometry{a4paper,top=2.5cm,bottom=2.5cm,left=2.8cm,right=2.8cm,headheight=14pt}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=black,citecolor=black,urlcolor=black]{hyperref}
+
+\graphicspath{{./}}
+
+\captionsetup{font=small,labelsep=quad}
+\captionsetup[table]{skip=4pt}
+\renewcommand{\arraystretch}{1.25}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\zihao{5}\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+% 正文行距与段落间距：评阅人翻得快，太挤直接影响印象分
+\linespread{1.35}
+\setlength{\parskip}{0.4ex}
+
+% ============================================================
+% 题目与摘要页
+% 题目要落到方法上，别只写"……的建模"。摘要页是评阅人唯一保证会
+% 逐字看的部分，对应阶段 9。
+% ============================================================
+\begin{document}
+
+\begin{center}
+  {\zihao{-3}\heiti 这里填论文题目}\\[6pt]
+\end{center}
+
+\begin{center}
+  {\zihao{4}\heiti 摘\quad 要}
+\end{center}
+
+% 摘要三段式：问题 → 方法（具体到模型名与求解器）→ 结论（带数值）。
+% 逐问都要覆盖，缺哪一问就是丢哪一问的分。
+这里写摘要第一段：赛题要解决的核心问题是什么，你的总体思路是什么。
+
+这里写摘要第二段：针对问题一/二/三分别用了什么方法，模型的关键假设与求解算法叫什么，用什么工具求解、规模多大。
+
+这里写摘要第三段：给出主要结果的数值（购电量、费用、误差、灵敏度幅度等），并说明结论在什么条件下成立。
+
+\begin{flushleft}
+  \zihao{-4}\textbf{关键词：} 关键词一；关键词二；关键词三；关键词四；关键词五
+\end{flushleft}
+
+\newpage
+
+% ============================================================
+\section{问题重述}
+% 对应阶段 1「读题与问题拆解」。把任务卡「逐问拆解」「附件与数据」
+% 两栏的内容改写成完整句子放进来，不要复制赛题原文整段。
+% ============================================================
+
+\subsection{问题背景}
+问题背景用自己的话复述：研究对象是什么、要调控/优化/评价的对象是什么、为什么难。
+
+\subsection{需要解决的问题}
+问题一：……（已知条件、要求的结果、结果要交到哪里）
+
+问题二：……
+
+\subsection{附件与数据}
+\begin{table}[H]
+  \centering
+  \caption{附件数据说明}
+  \begin{tabularx}{\textwidth}{lXl}
+    \toprule
+    附件 & 内容与字段 & 规模 \\
+    \midrule
+    附件1 & 待填 & 待填 \\
+    附件2 & 待填 & 待填 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% ============================================================
+\section{问题分析}
+% 对应阶段 4「模型选型」。这一节要写出「比较」而不是「宣布」：
+% 每个小问有哪几条可选路线、各自的适用前提与代价、为什么最终选它。
+% ============================================================
+
+各小问的求解对象、数据形态与目标函数形式分别是什么，据此说明为什么问题一适合先做确定性问题、问题三为什么必须引入随机性或滚动调整。
+
+% ============================================================
+\section{模型假设}
+% 对应阶段 3。每条假设一行，并在括号里注明它在后面哪一节被用到。
+% 「假设数据真实可靠」这种空话不要写。
+% ============================================================
+\begin{enumerate}[leftmargin=2em,itemsep=2pt]
+  \item 假设……（用于第 X 节的目标函数构造）
+  \item 假设……（若不为真，影响是……）
+\end{enumerate}
+
+% ============================================================
+\section{符号说明}
+% 对应阶段 3「符号表」。符号全文唯一、必须带单位。
+% ============================================================
+\begin{longtable}{clc}
+  \caption{主要符号及含义} \\
+  \toprule
+  符号 & 含义 & 单位 \\
+  \midrule
+  \endfirsthead
+  \toprule
+  符号 & 含义 & 单位 \\
+  \midrule
+  \endhead
+  $x$ & 待填 & 待填 \\
+  $C$ & 待填 & 元 \\
+  \bottomrule
+\end{longtable}
+
+% ============================================================
+\section{数据的预处理与探索分析}
+% 对应阶段 2。写清缺失/异常怎么判定、怎么处理、为什么，并放至少
+% 一张能支撑后续建模选择的分布图。图无坐标轴名称与单位＝白画。
+% ============================================================
+
+\begin{figure}[H]
+  \centering
+  % 把沙箱跑出来的图直接按文件名引用
+  % \includegraphics[width=0.72\textwidth]{explore.png}
+  \caption{这里写图题：它回答哪个问题}
+  \label{fig:explore}
+\end{figure}
+
+\subsection{数据清洗规则}
+清洗规则：缺失如何判定、如何处理；异常如何判定；量纲与时间粒度如何统一。
+
+\subsection{探索性结论}
+从数据里读出的、真正影响建模决定的两三条事实。
+
+% ============================================================
+\section{模型的建立与求解}
+% 对应阶段 5 与 6。每个小问一节：先给决策变量与目标函数，再给约束
+% （逐条标注来源：题目给定还是假设引入），最后写求解算法与结果。
+% 公式要有编号并在正文里被引用，结果要有量纲解释。
+% ============================================================
+
+\subsection{问题一的模型}
+决策变量、目标函数与约束。
+
+\begin{equation}
+  \min \; Z = \sum_{t=1}^{T} p_t \, x_t
+  \label{eq:objective}
+\end{equation}
+其中 $p_t$ 为时段 $t$ 的电价，$x_t$ 为待填。式~\eqref{eq:objective} 的约束为：
+\begin{equation}
+  \begin{cases}
+    \text{约束一} \\
+    \text{约束二}
+  \end{cases}
+\end{equation}
+
+\subsection{问题一的求解与结果}
+求解思路、算法、规模与耗时；结果按赛题要求的表格格式给出。
+
+\begin{table}[H]
+  \centering
+  \caption{结果表（按赛题指定格式填写）}
+  \begin{tabular}{cc}
+    \toprule
+    量 & 数值 \\
+    \midrule
+    待填 & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{问题二的模型}
+与问题一的差异在哪里，为什么原模型不能直接用。
+
+\subsection{问题二的求解与结果}
+结果与解释，异常值怎么处理。
+
+% ============================================================
+\section{灵敏度分析}
+% 对应阶段 7，这是评分表里的稳健性项，也是最常被跳过的一节。
+% 扰动幅度要说明依据，结论要给出「在多大范围内不变、在哪里翻转」。
+% ============================================================
+
+\begin{table}[H]
+  \centering
+  \caption{参数扰动对目标值的影响}
+  \begin{tabular}{ccc}
+    \toprule
+    参数 & 扰动幅度 & 目标值变化率 \\
+    \midrule
+    待填 & $\pm 10\%$ & 待填 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% ============================================================
+\section{模型的评价与改进}
+% 优点、缺点都要具体到可核验的点上；改进方向要能接着做，不写
+% "可以进一步推广"这类话。
+% ============================================================
+
+\subsection{模型优点}
+
+\subsection{模型缺点与改进方向}
+
+% ============================================================
+\begin{spacing}{1.0}
+\begin{thebibliography}{99}
+% 参考文献只列你真正引用过的；正文里必须有 \cite 与之对应。
+% 数量与格式不一致是提交前自查清单里的常见失分项。
+  \bibitem{ref1} 作者. 书名[M]. 出版地: 出版社, 年.
+  \bibitem{ref2} 作者. 题名[J]. 期刊名, 年, 卷(期): 起止页码.
+\end{thebibliography}
+\end{spacing}
+
+% ============================================================
+\section*{附录}
+\addcontentsline{toc}{section}{附录}
+% 附录：支撑代码（含可复现的运行说明）、补充图表、超出页数的推导。
+% 源程序要能跑出正文里的结果，否则不要放。
+% ============================================================
+源代码清单、补充数据表、以及正文放不下但影响复现的材料。
+
+\end{document}

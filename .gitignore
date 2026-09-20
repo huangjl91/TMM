@@ -1,0 +1,30 @@
+node_modules/
+out/
+dist/
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.local
+workspaces/
+.tmp/
+release/
+
+# 密钥与本地环境，永远不入库
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# 构建与测试的副产物
+coverage/
+*.tsbuildinfo
+*.stackdump
+
+# 图标素材：source.jpg 是从聊天工具收到的原图，含个人信息，只留本机
+resources/icon/source.jpg
+
+# 系统与编辑器
+Thumbs.db
+Desktop.ini
