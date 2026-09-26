@@ -366,7 +366,7 @@ export function GuidedQuizPanel({
       setSandboxMessage({
         ok: true,
         text: mode === 'prediction'
-          ? '预测基线已完成：结果表、验证图和 model_evidence.json 已写入本会话工作区。'
+          ? '模型比较已完成：滚动选模、独立测试、预测区间和 model_evidence.json 已写入本会话工作区。'
           : '数据检查已完成：预览图和 evidence_manifest.json 已写入本会话工作区。'
       })
     } catch (e) {
@@ -871,7 +871,7 @@ export function GuidedQuizPanel({
                     className="flex items-center gap-1.5 rounded-lg border border-sky-400/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-100 hover:bg-sky-500/25 disabled:opacity-50"
                   >
                     <span>📈</span>
-                    <span>{sandboxRunning ? '正在沙箱中运行...' : '运行预测基线'}</span>
+                    <span>{sandboxRunning ? '正在沙箱中运行...' : '运行模型比较'}</span>
                   </button>
                 ) : null}
               </div>
@@ -886,6 +886,15 @@ export function GuidedQuizPanel({
                 当前代码读取：{selectedDataFile?.relPath}
               </div>
             )}
+
+            {state?.categoryAssessment.active === 'prediction' ? (
+              <div className="rounded-lg border border-violet-400/25 bg-violet-500/[0.07] px-3 py-2 text-xs text-violet-100">
+                <div className="font-semibold">本次预测如何选模型</div>
+                <div className="mt-1 text-violet-100/70">
+                  ① 训练段滚动验证选模型　→　② 独立测试集只做最终评估　→　③ 用训练段验证残差估计 80% / 95% 预测区间
+                </div>
+              </div>
+            ) : null}
 
             {sandboxMessage ? (
               <div className={`rounded-lg border px-3 py-2 text-xs ${sandboxMessage.ok ? 'border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-200' : 'border-rose-500/25 bg-rose-500/[0.06] text-rose-200'}`}>
@@ -934,7 +943,7 @@ export function GuidedQuizPanel({
                       <div className="mt-2 text-[11px] text-white/40">
                         共 {dataProfile.rowCount} 行；运行数据检查会生成 evidence_manifest.json。
                         {state?.categoryAssessment.active === 'prediction'
-                          ? ` 预测基线使用“${yColumns[0] || '尚未选择'}”作为目标，并生成 model_evidence.json。`
+                          ? ` 模型比较使用“${yColumns[0] || '尚未选择'}”作为目标，并生成 model_evidence.json。`
                           : ''}
                       </div>
                     ) : null}
@@ -988,7 +997,7 @@ export function GuidedQuizPanel({
             {effectivePredictionCode ? (
               <details className="rounded-lg border border-sky-500/20 bg-black/30 p-3 text-xs">
                 <summary className="cursor-pointer font-medium text-sky-200/70 hover:text-sky-100">
-                  查看可复现预测基线代码
+                  查看可复现模型比较代码
                 </summary>
                 <pre className="mt-2 max-h-56 overflow-auto rounded bg-black/60 p-3 font-mono text-[11px] leading-relaxed text-sky-100/90">
                   {effectivePredictionCode}
@@ -1001,7 +1010,7 @@ export function GuidedQuizPanel({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold text-sky-200">本次运行的模型证据</span>
                   <span className="rounded bg-sky-500/15 px-2 py-1 text-sky-100">
-                    按 {predictionEvidence.selectionMetric} 选择：{predictionEvidence.bestModel}
+                    滚动验证按 {predictionEvidence.selectionMetric} 选择：{predictionEvidence.bestModel}
                   </span>
                 </div>
                 <div className="text-white/55">
