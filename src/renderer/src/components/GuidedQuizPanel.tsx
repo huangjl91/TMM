@@ -85,6 +85,7 @@ export function GuidedQuizPanel({
         questionIdx: currentQIdx,
         questionLabel: `问题 ${currentQIdx}`,
         questionBrief: '（尚未导入题目，先按经典数模题型体验引导做题流程）',
+        sourceReady: false,
         currentStep: 'intuition',
         completed: false,
         knowledge,
@@ -121,6 +122,10 @@ export function GuidedQuizPanel({
   )
   const curQ: GuidedQuestion = state?.questions?.[activeStep] || stepQuestions[activeStep]
   const curModels = state?.candidateModels?.length ? state.candidateModels : fallbackModels
+  const hasDataAttachment = Boolean(files?.some((f) => f.kind !== 'problem'))
+  const visualizationReadsData = Boolean(
+    curQ.visualization?.pythonCode && /read_(?:csv|excel|parquet)|loadtxt/i.test(curQ.visualization.pythonCode)
+  )
 
   // 深度重新解构本问（结合赛题全文重新提取机理并刷新引导题）
   const handleReanalyze = async (): Promise<void> => {
@@ -246,6 +251,10 @@ export function GuidedQuizPanel({
   const handleRunVisualizationCode = async (): Promise<void> => {
     const code = curQ.visualization?.pythonCode
     if (!code) return
+    if (!hasDataAttachment || !visualizationReadsData) {
+      setSyncStatus('未运行：请先导入数据附件，并让绘图代码显式读取该数据；系统不会运行内置模拟数据。')
+      return
+    }
     if (onSendToSandbox) {
       onSendToSandbox(code)
     }
@@ -348,6 +357,25 @@ export function GuidedQuizPanel({
       ) : null}
 
       <div className="flex-1 space-y-4 p-5">
+        {!state?.sourceReady ? (
+          <div className="mx-auto mt-10 max-w-2xl rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-8 text-center shadow-sm">
+            <div className="text-3xl">📥</div>
+            <h2 className="mt-3 text-base font-semibold text-white">先提供真实题目，再开始建模引导</h2>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-white/60">
+              当前没有可追溯的题目文本。系统不会预填题型、候选模型、模拟指标或论文结论，以免把示例误当成真实分析。
+            </p>
+            {onIntake ? (
+              <button
+                onClick={onIntake}
+                disabled={intakeBusy}
+                className="mt-5 rounded-xl bg-sky-600 px-5 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-40"
+              >
+                {intakeBusy ? '正在解析赛题...' : '导入题目与数据附件'}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+        <>
         {/* 当前问题简介与深度解构看板 */}
         <div className="rounded-xl border border-white/10 bg-[#161a23] p-4 shadow-sm space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2.5">
@@ -686,20 +714,26 @@ export function GuidedQuizPanel({
                 <span className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/20 text-xs font-bold text-emerald-400">
                   图
                 </span>
-                <span className="text-sm font-semibold text-white">科研数据可视化与学术结论</span>
+                <span className="text-sm font-semibold text-white">科研数据可视化与结果验证</span>
                 <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">
-                  顶刊学术规范
+                  以真实输出为准
                 </span>
               </div>
               <button
                 onClick={handleRunVisualizationCode}
-                disabled={sandboxRunning}
+                disabled={sandboxRunning || !hasDataAttachment || !visualizationReadsData}
                 className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
               >
                 <span>{sandboxRunning ? '⏳' : '🚀'}</span>
-                <span>{sandboxRunning ? '正在沙箱中运行出图...' : '在沙箱中运行并生成图表'}</span>
+                <span>{sandboxRunning ? '正在沙箱中运行出图...' : '读取真实数据后运行'}</span>
               </button>
             </div>
+
+            {!hasDataAttachment || !visualizationReadsData ? (
+              <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-200">
+                运行已锁定：需要数据附件，且代码必须通过 read_csv/read_excel/read_parquet/loadtxt 显式读取真实数据。
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 text-xs">
               <div className="space-y-1 rounded-lg border border-white/10 bg-black/30 p-3">
@@ -716,9 +750,9 @@ export function GuidedQuizPanel({
                 <p className="text-white/85 leading-relaxed">{curQ.visualization.expectedFinding}</p>
               </div>
               <div className="space-y-1 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 md:col-span-2">
-                <span className="font-semibold text-emerald-300">4. 论文正文中应填写的学术结论段落（金句）</span>
+                <span className="font-semibold text-emerald-300">4. 学生结果填写框架</span>
                 <p className="italic text-white/90 leading-relaxed">
-                  “{curQ.visualization.paperConclusion}”
+                  {curQ.visualization.paperConclusion}
                 </p>
               </div>
             </div>
@@ -766,7 +800,7 @@ export function GuidedQuizPanel({
                 className="flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-200 hover:bg-sky-500/20"
               >
                 <span>📌</span>
-                <span>一键同步至任务卡与论文初稿</span>
+                <span>同步至任务卡与写作提纲</span>
               </button>
             </div>
 
@@ -792,6 +826,8 @@ export function GuidedQuizPanel({
             </div>
           </div>
         ) : null}
+        </>
+        )}
       </div>
     </div>
   )

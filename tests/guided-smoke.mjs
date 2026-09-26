@@ -51,7 +51,7 @@ assert.ok(vis.plotType, '缺少图表类型说明')
 assert.ok(vis.xLabel, '缺少横轴与量纲说明')
 assert.ok(vis.yLabel, '缺少纵轴与量纲说明')
 assert.ok(vis.expectedFinding, '缺少图表揭示现象说明')
-assert.ok(vis.paperConclusion, '缺少论文核心结论段落')
+assert.ok(vis.paperConclusion.includes('待'), '结论必须保留待计算占位符')
 assert.ok(vis.pythonCode.includes('import matplotlib.pyplot as plt'), '缺少学术级 Python 绘图代码')
 console.log('PASS  第4阶梯数据可视化专项完备 (画什么图 + 坐标量纲 + 现象 + 论文结论 + 代码)')
 
@@ -68,8 +68,10 @@ assert.ok(draft.problemRestatement.includes('混合整数线性规划') === fals
 assert.ok(draft.problemRestatement.includes('核心矛盾识别'))
 assert.ok(draft.modelFormulation.includes('混合整数线性规划 MILP'))
 assert.ok(draft.visualizationPlan.includes('甘特图'))
-assert.ok(draft.paperSnippet.includes('\\subsection{问题 1 模型的建立与求解}'))
-console.log('PASS  4 步决策自动拼装为解题重述、数学推导、可视化方案与 LaTeX 论文片段')
+assert.ok(draft.paperSnippet.includes('学生写作提纲'))
+assert.ok(draft.paperSnippet.includes('【待计算】'))
+assert.equal(/MAPE\s*(?:为|=)\s*\d/i.test(draft.paperSnippet), false)
+console.log('PASS  4 步决策自动拼装为解题重述、数学推导、验证清单与学生写作提纲')
 
 // 6. 微网赛题真实要素抽取与针对性问题生成校验
 const cProblemText = `

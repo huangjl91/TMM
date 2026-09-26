@@ -34,7 +34,7 @@ import { sliceJsonObject } from '../shared/agent'
 function getProblemContext(
   sessionId: number,
   questionIdx: number
-): { brief: string; fullText: string } {
+): { brief: string; fullText: string; sourceReady: boolean } {
   let brief = ''
   let fullText = ''
 
@@ -55,10 +55,11 @@ function getProblemContext(
 
   if (!brief) {
     const s1Outputs = latestStageOutputs(sessionId, 1)
-    brief = s1Outputs.problems || s1Outputs.data || `问题 ${questionIdx}`
+    brief = s1Outputs.problems || s1Outputs.data || ''
   }
 
-  return { brief, fullText }
+  const sourceReady = Boolean(brief.trim() || fullText.trim())
+  return { brief: brief || `问题 ${questionIdx}`, fullText, sourceReady }
 }
 
 function loadOrGenerateAnalysis(
@@ -71,8 +72,9 @@ function loadOrGenerateAnalysis(
   elements: ProblemElements
   candidateModels: CandidateModelInfo[]
   brief: string
+  sourceReady: boolean
 } {
-  const { brief, fullText } = getProblemContext(sessionId, questionIdx)
+  const { brief, fullText, sourceReady } = getProblemContext(sessionId, questionIdx)
   const candidateModels = getCandidateModelsForQuestion(questionIdx, brief, fullText)
 
   if (!forceRefresh) {
@@ -82,7 +84,7 @@ function loadOrGenerateAnalysis(
         const knowledge = JSON.parse(cached.knowledgeJson) as ProblemKnowledge
         const questions = JSON.parse(cached.questionsJson) as Record<GuidedStep, GuidedQuestion>
         const elements = JSON.parse(cached.elementsJson) as ProblemElements
-        return { knowledge, questions, elements, candidateModels, brief }
+        return { knowledge, questions, elements, candidateModels, brief, sourceReady }
       } catch (e) {
         console.warn('[guidedQuiz] Failed to parse cached analysis:', e)
       }
@@ -101,12 +103,12 @@ function loadOrGenerateAnalysis(
     JSON.stringify(elements)
   )
 
-  return { knowledge, questions, elements, candidateModels, brief }
+  return { knowledge, questions, elements, candidateModels, brief, sourceReady }
 }
 
 export function getGuidedState(sessionId: number, questionIdx: number): GuidedSessionState {
   const qIdx = Math.max(1, questionIdx)
-  const { knowledge, questions, elements, candidateModels, brief } = loadOrGenerateAnalysis(sessionId, qIdx)
+  const { knowledge, questions, elements, candidateModels, brief, sourceReady } = loadOrGenerateAnalysis(sessionId, qIdx)
   const stored = getGuidedChoices(sessionId, qIdx) as Partial<Record<GuidedStep, StepChoice>>
 
   const stepsOrder: GuidedStep[] = ['intuition', 'model_select', 'formulation', 'visualization']
@@ -133,6 +135,7 @@ export function getGuidedState(sessionId: number, questionIdx: number): GuidedSe
     questionIdx: qIdx,
     questionLabel: `问题 ${qIdx}`,
     questionBrief: brief,
+    sourceReady,
     currentStep,
     completed,
     knowledge,
@@ -150,6 +153,9 @@ export function handleGuidedChoose(
   step: GuidedStep,
   choice: { pickedKey: string; pickedText: string; pickedMeans: string; userNote?: string }
 ): GuidedSessionState {
+  if (!getProblemContext(sessionId, questionIdx).sourceReady) {
+    throw new Error('请先导入题目或在自由探究中描述题目，再开始引导选择。')
+  }
   saveGuidedChoice(
     sessionId,
     questionIdx,
@@ -176,7 +182,8 @@ export async function handleGuidedReanalyze(
   sessionId: number,
   questionIdx: number
 ): Promise<GuidedSessionState> {
-  const { brief, fullText } = getProblemContext(sessionId, questionIdx)
+  const { brief, fullText, sourceReady } = getProblemContext(sessionId, questionIdx)
+  if (!sourceReady) throw new Error('没有可分析的题目文本，请先导入或描述题目。')
   const s = loadSettings()
   const key = getApiKey(s.providerId)
 
@@ -215,8 +222,8 @@ export async function handleGuidedReanalyze(
       '      "ask": "...", "options": [...], "aiAdvice": {...},',
       '      "visualization": {',
       '        "plotType": "学术图表类型（双Panel复合图）", "xLabel": "横轴说明", "yLabel": "纵轴说明",',
-      '        "dataOrigin": "数据来源", "expectedFinding": "揭示的规律", "paperConclusion": "论文结论金句",',
-      '        "pythonCode": "# 可直接在沙箱运行的完整 Matplotlib 绘图代码" ',
+      '        "dataOrigin": "真实数据来源", "expectedFinding": "需要由真实输出验证的问题", "paperConclusion": "仅含【待计算】占位符的学生填写框架",',
+      '        "pythonCode": "# 只提供读取真实数据与校验字段的代码骨架；禁止随机造数和预填结果" ',
       '      }',
       '    }',
       '  }',
@@ -247,6 +254,11 @@ export async function handleGuidedReanalyze(
       if (jsonText) {
         const parsed = JSON.parse(jsonText)
         if (parsed.elements && parsed.knowledge && parsed.questions) {
+          const vis = parsed.questions?.visualization?.visualization
+          if (vis) {
+            vis.expectedFinding = '运行真实数据后验证：趋势、差异、异常点及其不确定性。'
+            vis.paperConclusion = '【待学生填写】指标【待计算】；对比基线【待计算】；结论仅依据沙箱输出。'
+          }
           saveGuidedAnalysis(
             sessionId,
             questionIdx,
@@ -290,6 +302,9 @@ export async function handleGuidedAskAi(
   ask: string,
   options: GuidedOption[]
 ): Promise<AiAdvice> {
+  if (!getProblemContext(sessionId, questionIdx).sourceReady) {
+    throw new Error('请先导入题目或在自由探究中描述题目，再请求导师分析。')
+  }
   const { questions, brief } = loadOrGenerateAnalysis(sessionId, questionIdx)
   const fallbackAdvice = questions[step]?.aiAdvice
 
@@ -384,6 +399,9 @@ export function handleGuidedSync(
   questionIdx: number
 ): { ok: boolean; message: string } {
   const state = getGuidedState(sessionId, questionIdx)
+  if (!state.sourceReady) {
+    return { ok: false, message: '请先导入题目或描述题目，空白示例不会同步到任务卡。' }
+  }
   if (!state.generatedDraft) {
     return { ok: false, message: '请先完成该小问至少前两步的选择题引导' }
   }

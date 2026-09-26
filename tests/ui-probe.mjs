@@ -83,6 +83,20 @@ async function sendFirstMessage(text, tries = 24) {
   return last
 }
 
+// 专项探针仍验证自由探究中的旧工作流；新版默认打开“引导式做题”，先显式切换入口。
+const legacyChatModes = new Set(['stage', 'paper', 'methods', 'compliance', 'questions', 'quiz', 'plot'])
+if (legacyChatModes.has(process.argv[2])) {
+  const switched = await evaluate(`(() => {
+    const btn = [...document.querySelectorAll('button')]
+      .find((b) => b.innerText.includes('自由探究'))
+    if (!btn) return 'NO_FREE_EXPLORE_TAB'
+    btn.click()
+    return 'SWITCHED_TO_FREE_EXPLORE'
+  })()`)
+  console.log('工作流入口:', switched)
+  await new Promise((r) => setTimeout(r, 500))
+}
+
 const expr = `JSON.stringify({
   title: document.title,
   mounted: (document.getElementById('root')?.childElementCount ?? 0) > 0,

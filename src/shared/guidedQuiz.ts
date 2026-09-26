@@ -124,6 +124,8 @@ export interface GuidedSessionState {
   questionIdx: number
   questionLabel: string
   questionBrief: string
+  /** 是否已有真实题目文本；false 时不得生成候选模型、代码或结论。 */
+  sourceReady: boolean
   currentStep: GuidedStep
   completed: boolean
   knowledge: ProblemKnowledge
@@ -424,7 +426,7 @@ function buildMicrogridGuidedQuestions(
         ],
         aiAdvice: {
           recommended: 'A',
-          reason: '问题 2 最关键的数据支撑就是“避免了多少次 5 倍紧急购电”与“节省了多少巨额罚款”。双 Panel 图一目了然：Baseline 方案在尖峰时段频繁触发 5 倍罚款，而本文鲁棒模型将紧急购电量压缩了 85% 以上。',
+          reason: '问题 2 最关键的数据支撑是“避免了多少次 5 倍紧急购电”与“节省了多少罚款”。双 Panel 图可同时检查风险时段与方案差异，但具体改善比例必须由真实求解结果计算。',
           pitfalls: {
             A: '完全契合国赛评奖对“直观证据链”的要求。',
             B: '未能回答问题 2 的核心考查指标。'
@@ -435,9 +437,9 @@ function buildMicrogridGuidedQuestions(
           xLabel: 'Panel a 横轴：时刻 t (00:00 ~ 24:00, 小时 / h) ； Panel b 横轴：调度方案策略',
           yLabel: 'Panel a 纵轴：功率 (kW) ； Panel b 纵轴：全天购电与罚款总额 (元)',
           dataOrigin: '附件 2 历史负荷波动统计、求解器输出计划购电矩阵与表 3 指定日期紧急购电记录',
-          expectedFinding: '传统确定性方案在 18:00-21:00 负荷晚高峰期频繁触发 5 倍紧急购电；本文鲁棒方案通过适度前置储能备用，将紧急购电次数由 14 次降至 1 次，高风险时段供电保障率提升至 99.2%。',
+          expectedFinding: '检验晚高峰是否更易触发紧急购电，以及鲁棒方案是否降低紧急购电次数和罚款；次数、比例与保障率均由求解输出填写。',
           paperConclusion:
-            '由图 4 的负荷波动置信区间与方案对比可知：所提出的两阶段鲁棒调度策略成功化解了 5 倍惩罚电价的极端风险。相比基准方案（Baseline），微网在 2025.3.20 等四个指定日期的紧急购电量均值降低 89.3%，避免了高达 3850 元的高额罚款；在保障小区 100% 不断电的刚性约束下，全天综合用能成本下降 24.16%，成果已按要求存入 result2.xlsx。',
+            '【待学生填写】基准方案与鲁棒方案的紧急购电量、罚款和供电约束满足率均为【待计算】；填写时注明数据日期、求解器状态与输出文件。',
           pythonCode: `# -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
 import numpy as np
@@ -678,9 +680,9 @@ plt.show()
         xLabel: 'Panel a & b 横轴：调度时间周期 t (00:00 ~ 24:00 / 小时 h)',
         yLabel: 'Panel a 纵轴：实时功率 (kW) ； Panel b 纵轴：蓄电池储电量 E(t) (kWh) / 电价 (元/kWh)',
         dataOrigin: '附件 1 电价表、附录 1 负荷与光伏数据、优化求解器输出决策变量矩阵',
-        expectedFinding: '在凌晨谷电价区间（00:00-06:00），储能电池以最大允许功率 5000 kW 积极蓄能至 12000 kWh 上限；在午间及晚间高峰电价区间（10:00-14:00, 18:00-21:00），储能高效放电支撑小区负荷，使高价电网购电量压降至极低水平；24:00 电池储量精确恢复至初始状态。',
+        expectedFinding: '检验储能是否呈现谷充峰放、供需是否逐时平衡，以及期末储量是否回到题设要求；具体时段和数值由求解输出填写。',
         paperConclusion:
-          '由图 3 的 24 小时微网功率调度平衡与储能状态可知：所构建的 MILP 优化模型实现了能量供需守恒闭环。通过谷充峰放策略，高电价时段购电需求下降 68.4%；全天微网购电总成本较基准策略（Baseline）显著降低 31.37%，且严格满足 0:00 与 24:00 储能荷电状态相同及功率限额约束，结果已完整输出至 result1.xlsx。',
+          '【待学生填写】高价时段购电变化【待计算】、总成本变化【待计算】；同时引用供需平衡、期末储量与功率限额的校验输出。',
         pythonCode: `# -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
 import numpy as np
@@ -963,9 +965,9 @@ export function buildDefaultGuidedQuestions(
           xLabel: 'Panel A 横轴：调度时间周期 t (h) ； Panel B 横轴：方案类别 (Baseline vs 本文模型)',
           yLabel: 'Panel A 纵轴：资源/机位编号 ； Panel B 纵轴：综合运营总成本 (万元)',
           dataOrigin: '求解器输出的决策变量矩阵 X 与目标函数值计算明细',
-          expectedFinding: '甘特图中所有任务块均严格处于可用时间窗内，无时间交叠与容量超限；各机位负荷分布平稳。',
+          expectedFinding: '检查任务是否处于可用时间窗、是否存在交叠或容量超限，并比较各资源负荷；结论由求解输出填写。',
           paperConclusion:
-            '由图 4 的甘特调度图与方案效益对比可见：所构建的混合整数规划模型实现了全部任务的时序无冲突闭环调度；相比传统经验规则（Baseline），系统综合运营成本由 48.62 万元下降至 39.15 万元，显著降低 19.47%，验证了模型的优越性。',
+            '【待学生填写】可行任务数【待计算】、冲突数【待计算】、基线与模型成本【待计算】；仅在求解状态可行且约束校验通过后下结论。',
           pythonCode: `# -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1170,9 +1172,9 @@ plt.show()
           xLabel: 'Panel A 横轴：TOPSIS 综合相对贴近度 C_i (分值 0~1) ； Panel B：各归一化指标维度',
           yLabel: 'Panel A 纵轴：评价对象编号 / 样本标识',
           dataOrigin: 'TOPSIS 算法输出的相对贴近度向量 C 与标准化指标矩阵 Z',
-          expectedFinding: '第一名对象综合得分 0.842，在核心效益指标上具有绝对统治力；后两名对象由于成本型指标与能耗过高导致贴近度低于 0.35。',
+          expectedFinding: '检查排名、得分差距与主要贡献指标，并通过权重敏感性分析判断排序是否稳定；所有得分由真实计算填写。',
           paperConclusion:
-            '由图 3 的综合评价排名与多维雷达对比图可知：样本 A4 凭借在技术成熟度与产出效率上的显著优势，以相对贴近度 C=0.842 位列第一；而样本 A2 因能耗及排放指标失衡，综合表现垫底。该结论为后续管理策略的靶向优化提供了明确的定量依据。',
+            '【待学生填写】排名第一对象【待计算】、相对贴近度【待计算】、主要优势指标【待核验】；补充权重扰动后的名次稳定性。',
           pythonCode: `# -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1395,9 +1397,9 @@ plt.show()
         xLabel: 'Panel A 横轴：时间序列 (年份/月份) ； Panel B 横轴：标准化残差值 \\epsilon_t',
         yLabel: 'Panel A 纵轴：监测指标数值 (附物理量纲) ； Panel B 纵轴：频数密度 (Density)',
         dataOrigin: '附件历史时序数据与 SARIMA/Prophet 预测外推输出',
-        expectedFinding: '历史拟合曲线紧密贴合实际观测值（MAPE 仅为 3.42%）；未来外推呈现平稳上升趋势，且残差近似服从标准正态分布 N(0, \\sigma^2)。',
+        expectedFinding: '检查拟合误差、未来趋势、预测区间覆盖与残差结构；MAPE、R²、区间和检验 p 值均由真实输出填写。',
         paperConclusion:
-          '由图 2 的时序外推与残差诊断图清晰可见：所构建的季节性时序模型历史拟合平均绝对百分比误差 (MAPE) 为 3.42%，决定系数 R^2=0.941；预测未来 3 个周期该指标将保持年均 5.8% 的平稳增长，其 95% 置信区间为 [128.4, 142.1]；残差通过白噪声检验（p=0.48 > 0.05），证实信息已被充分提取，预测结论具有高度可信度。',
+          '【待学生填写】MAPE【待计算】、R²【待计算】、预测区间【待计算】、残差检验 p 值【待计算】；依据检验结果说明模型是否可用于外推。',
         pythonCode: `# -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1496,27 +1498,23 @@ ${deliverablesList}`
 2. ${knowledge.keyPrinciples[1] ?? '约束完整性检查'}
 3. ${knowledge.keyPrinciples[2] ?? '灵敏度与稳健性对冲'}`
 
-  const visualizationPlan = `【问题 ${questionIdx} 科研数据可视化与结论方案】
+  const visualizationPlan = `【问题 ${questionIdx} 科研数据可视化与验证清单】
 选定图表类型：${spec?.plotType ?? (c4 ? `${c4.pickedKey}. ${c4.pickedText}` : '尚未配置')}
 坐标轴与物理量纲：
 - 横轴：${spec?.xLabel ?? '待定'}
 - 纵轴：${spec?.yLabel ?? '待定'}
-预期揭示数据规律：${spec?.expectedFinding ?? '待定'}
-论文正文必备核心结论：
-“${spec?.paperConclusion ?? (c4 ? c4.pickedMeans : '待定')}”`
+待验证的问题：${spec?.expectedFinding ?? '运行真实数据后记录趋势、差异和异常点'}
+结果填写要求：
+- 数据来源与样本范围：【待填写】
+- 实际指标与不确定性：【待计算】
+- 图表支持或否定的判断：【待学生依据输出填写】`
 
-  const paperSnippet = `\\subsection{问题 ${questionIdx} 模型的建立与求解}
-
-\\subsubsection{问题重述与机理分析}
-针对问题 ${questionIdx}，${c1 ? c1.pickedText : '深入分析核心数据特征与业务矛盾'}。从数学本质上看，该问题属于典型的${knowledge.mathEssence}。
-
-\\subsubsection{模型的建立与推导}
-基于前述机理分析，本文选取${c2 ? c2.pickedText : '专业数学模型'}作为主力分析工具。${c3 ? `在具体参数设定与约束构建上，本文采用${c3.pickedText}，确保物理量纲平衡与理论收敛性。` : ''}
-
-\\subsubsection{结果分析与学术可视化}
-采用所构建的模型进行数值求解与优化，并绘制了科研级学术成果图（见图 \\ref{fig:q${questionIdx}_result}）。
-${spec?.paperConclusion ? `\n${spec.paperConclusion}\n` : ''}
-`
+  const paperSnippet = `【学生写作提纲（不代写正文）】
+1. 用自己的话说明问题 ${questionIdx} 的目标、输入和约束。
+2. 解释为何选择「${c2?.pickedText ?? '待选择模型'}」，并写出适用条件。
+3. 填入真实运行结果：指标【待计算】、误差/区间【待计算】、基线对比【待计算】。
+4. 根据图表逐项回答：出现了什么规律？证据是什么？局限在哪里？
+5. 所有数字必须可追溯到导入数据和沙箱输出。`
 
   return {
     problemRestatement,

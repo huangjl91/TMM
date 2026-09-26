@@ -108,6 +108,15 @@ function findXelatex(): string | null {
   }
   const found: string[] = []
   for (const root of roots) {
+    if (process.platform === 'win32') {
+      for (const exe of [
+        join(root, 'miktex', 'bin', 'x64', 'xelatex.exe'),
+        join(root, 'miktex', 'bin', 'xelatex.exe'),
+        join(root, 'bin', 'x64', 'xelatex.exe')
+      ]) {
+        if (existsSync(exe)) found.push(exe)
+      }
+    }
     let versions: string[] = []
     try {
       versions = readdirSync(root)
