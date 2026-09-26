@@ -34,7 +34,7 @@
 
 - **Windows**（沙箱与 Job Object 依赖 Windows 语义；打包脚本按 Windows 写）
 - **Node 22+，建议 24**（Vite 7 的最低要求；本仓库开发时用的是 Node 24 / npm 11）
-- **Python 3.12 + numpy + matplotlib** —— 只有跑沙箱出图的功能需要。主进程按 `py -3.12` → 其它候选顺序探测，并优先挑带 numpy + matplotlib 的那个解释器
+- **Python 3.12 + numpy + matplotlib + pandas + openpyxl** —— 沙箱绘图以及 CSV/Excel 读取需要。主进程按 `py -3.12` → 其它候选顺序探测，并优先选择依赖完整的解释器
 - **TeX Live（或 MiKTeX）的 `xelatex`** —— 只有论文编译与合规 PDF 需要。先查 PATH，再扫 `C:\|D:\|E:\texlive\<版本>\bin\windows\xelatex.exe` 与 MiKTeX 安装目录
 
 缺 Python 或缺 XeLaTeX 时应用照常启动，相应功能会明确提示缺什么并禁用入口，已写内容不丢。
@@ -45,6 +45,7 @@
 git clone <仓库地址>
 cd math-modeling-tutor
 npm install
+npm run setup:python
 npm run dev
 ```
 
@@ -79,6 +80,7 @@ npm run dist      # electron-builder，产物在 release/
 | 命令 | 用途 | 需要 API Key / 网络？ |
 | --- | --- | --- |
 | `npm run dev` | 起开发窗口。主进程改动**不会**热重建，需要重启；加 `-w` 让主进程/preload 变更时自动重建 | 不需要（对话功能要 Key） |
+| `npm run setup:python` | 为 Python 3.12 安装沙箱绘图、CSV 与 Excel 读取依赖 | 需要访问 Python 包镜像 |
 | `npm run build` | 三端编译到 `out/` | 不需要 |
 | `npm run typecheck` | TS 两侧检查（node + web），strict 且开了 `noUncheckedIndexedAccess` | 不需要 |
 | `npm run dist` | electron-builder 打 Windows 包 | 要下载工具链 |

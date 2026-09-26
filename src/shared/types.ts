@@ -98,7 +98,7 @@ export interface RuntimeInfo {
   /** 学生要能自己去翻图表和 csv，别把产物藏起来 */
   sandboxRoot: string
   python: string | null
-  /** 探到 Python 但没装 numpy/matplotlib，画图和拟合都无从谈起 */
+  /** 探到 Python 但缺 numpy/matplotlib/pandas/openpyxl 时为 false */
   pythonReady: boolean
   xelatex: string | null
 }

@@ -10,6 +10,7 @@
     "build": "electron-vite build",
     "dist": "node scripts/dist.mjs",
     "icons": "node scripts/make-icon.mjs",
+    "setup:python": "py -3.12 -m pip install -r requirements-python.txt",
     "start": "electron-vite preview",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
