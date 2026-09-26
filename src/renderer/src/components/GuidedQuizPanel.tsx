@@ -1025,9 +1025,25 @@ export function GuidedQuizPanel({
                     </tbody>
                   </table>
                 </div>
+                {predictionEvidence.intervals.length ? (
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {predictionEvidence.intervals.map((interval) => (
+                      <div key={interval.level} className="rounded border border-sky-400/15 bg-black/20 p-3">
+                        <div className="font-semibold text-sky-100">{Math.round(interval.level * 100)}% 经验预测区间</div>
+                        <div className="mt-1 text-white/65">半宽：±{interval.halfWidth.toFixed(4)}</div>
+                        <div className="text-white/65">测试覆盖率：{(interval.coverage * 100).toFixed(1)}%</div>
+                        {interval.coverage < interval.level ? (
+                          <div className="mt-1 text-amber-300">低于标称水平，需要谨慎解释</div>
+                        ) : (
+                          <div className="mt-1 text-emerald-300">达到本测试集的标称水平</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="rounded border border-white/10 bg-black/25 p-3 text-white/70">
                   <div className="mb-1 font-semibold text-white/80">学生结果填写框架</div>
-                  <p>请依次说明：① 为什么采用时间顺序留出测试；② 三个模型在同一测试集上的指标差异；③ 为什么按 {predictionEvidence.selectionMetric} 选择 {predictionEvidence.bestModel}；④ 从残差图观察到的偏差方向或异常点；⑤ 当前比较仍有哪些局限。数字必须引用上表及 model_evidence.json。</p>
+                  <p>请依次说明：① 为什么采用时间顺序留出测试；② 各模型在同一测试集上的指标差异；③ 为什么按 {predictionEvidence.selectionMetric} 选择 {predictionEvidence.bestModel}；④ 80%/95% 区间覆盖了多少测试点，是否达到标称水平；⑤ 从残差图观察到的偏差和当前方法局限。数字必须引用上表及 model_evidence.json。</p>
                 </div>
               </div>
             ) : null}

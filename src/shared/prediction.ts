@@ -14,6 +14,7 @@ export interface PredictionEvidenceSummary {
   trainRows: number
   testRows: number
   metrics: Array<{ model: string; mae: number; rmse: number; mape: number | null }>
+  intervals: Array<{ level: number; halfWidth: number; coverage: number }>
 }
 
 /** 从沙箱证据文件提取可展示的客观结果；结构不完整时不猜测。 */
@@ -24,6 +25,7 @@ export function summarizePredictionEvidence(value: unknown): PredictionEvidenceS
   const selection = evidence.selection as Record<string, unknown> | undefined
   const split = evidence.split as Record<string, unknown> | undefined
   const byModel = evidence.metricsByModel as Record<string, Record<string, unknown>> | undefined
+  const intervalEvidence = evidence.predictionIntervals as Record<string, unknown> | undefined
   if (!selection || !split || !byModel || typeof selection.bestModel !== 'string') return null
 
   const metrics = Object.entries(byModel).flatMap(([model, raw]) => {
@@ -36,6 +38,16 @@ export function summarizePredictionEvidence(value: unknown): PredictionEvidenceS
       : []
   })
   if (!metrics.length) return null
+  const intervals = Array.isArray(intervalEvidence?.levels)
+    ? (intervalEvidence.levels as Array<Record<string, unknown>>).flatMap((item) => {
+        const level = Number(item.level)
+        const halfWidth = Number(item.halfWidth)
+        const coverage = Number(item.testCoverage)
+        return Number.isFinite(level) && Number.isFinite(halfWidth) && Number.isFinite(coverage)
+          ? [{ level, halfWidth, coverage }]
+          : []
+      })
+    : []
 
   const trainRows = Number(split.trainRows)
   const testRows = Number(split.testRows)
@@ -47,7 +59,8 @@ export function summarizePredictionEvidence(value: unknown): PredictionEvidenceS
     testRange: `${String(split.testStart)} 至 ${String(split.testEnd)}`,
     trainRows,
     testRows,
-    metrics
+    metrics,
+    intervals
   }
 }
 
@@ -246,6 +259,28 @@ best_model = min(metrics, key=lambda name: metrics[name]['RMSE'])
 best_pred = predictions[best_model]
 errors = actual - best_pred
 
+# 使用训练段残差估计对称经验预测区间，测试目标值只用于事后覆盖率检查。
+train_target = work['_target'].iloc[:train_count].to_numpy(dtype=float)
+train_residuals = {
+    'walk-forward-naive-lag-1': train_target[1:] - train_target[:-1],
+    'linear-trend': train_target - (trend_intercept + trend_slope * train_x),
+    'walk-forward-moving-average-3': np.asarray([
+        train_target[index] - float(np.mean(train_target[index - 3:index]))
+        for index in range(3, train_count)
+    ], dtype=float)
+}
+if seasonal_period and train_count >= 2 * seasonal_period:
+    train_residuals[f'seasonal-naive-{seasonal_period}'] = train_target[seasonal_period:] - train_target[:-seasonal_period]
+calibration_errors = np.abs(train_residuals[best_model])
+if len(calibration_errors) < 5:
+    raise ValueError('训练残差少于 5 个，无法可靠估计预测区间')
+width_80 = float(np.quantile(calibration_errors, 0.80))
+width_95 = float(np.quantile(calibration_errors, 0.95))
+lower_80, upper_80 = best_pred - width_80, best_pred + width_80
+lower_95, upper_95 = best_pred - width_95, best_pred + width_95
+coverage_80 = float(np.mean((actual >= lower_80) & (actual <= upper_80)))
+coverage_95 = float(np.mean((actual >= lower_95) & (actual <= upper_95)))
+
 result = pd.DataFrame({
     'time': work['_time'].iloc[train_count:].dt.strftime('%Y-%m-%dT%H:%M:%S').to_numpy(),
     'actual': actual,
@@ -256,11 +291,17 @@ result = pd.DataFrame({
 if seasonal_period and train_count >= 2 * seasonal_period:
     result[f'seasonal_naive_{seasonal_period}'] = seasonal_pred
 result['best_model_prediction'] = best_pred
+result['lower_80'] = lower_80
+result['upper_80'] = upper_80
+result['lower_95'] = lower_95
+result['upper_95'] = upper_95
 result['residual'] = errors
 result.to_csv('prediction_baseline_results.csv', index=False, encoding='utf-8-sig')
 
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=False)
 test_time = work['_time'].iloc[train_count:]
+ax1.fill_between(test_time, lower_95, upper_95, color='#4c78a8', alpha=0.12, label='95%经验区间')
+ax1.fill_between(test_time, lower_80, upper_80, color='#4c78a8', alpha=0.22, label='80%经验区间')
 ax1.plot(test_time, actual, marker='o', linewidth=1.7, label='测试集真实值')
 ax1.plot(test_time, naive_pred, marker='s', linestyle='--', linewidth=1.3, label='上一期观测')
 ax1.plot(test_time, trend_pred, marker='^', linestyle='--', linewidth=1.3, label='线性趋势')
@@ -317,6 +358,16 @@ manifest = {
         'scope': 'same chronological holdout test set'
     },
     'metricsByModel': metrics,
+    'predictionIntervals': {
+        'method': 'symmetric empirical absolute residual quantiles',
+        'calibrationSource': 'training residuals only',
+        'calibrationSamples': int(len(calibration_errors)),
+        'assumptions': ['训练残差可代表未来误差尺度', '区间关于点预测对称'],
+        'levels': [
+            {'level': 0.80, 'halfWidth': width_80, 'testCoverage': coverage_80},
+            {'level': 0.95, 'halfWidth': width_95, 'testCoverage': coverage_95}
+        ]
+    },
     'outputs': [
         {'path': 'prediction_baseline_results.csv', 'sha256': result_hash},
         {'path': 'prediction_baseline.png', 'sha256': plot_hash}
@@ -329,6 +380,7 @@ print('同一测试集模型比较:')
 for name, values in metrics.items():
     print(f"  {name}: MAE={values['MAE']:.6g}, RMSE={values['RMSE']:.6g}, MAPE={values['MAPE_percent'] if values['MAPE_percent'] is not None else '不适用'}")
 print(f'当前测试集最佳模型（按 RMSE）: {best_model}')
+print(f'经验预测区间: 80%半宽={width_80:.6g}，覆盖率={coverage_80:.1%}; 95%半宽={width_95:.6g}，覆盖率={coverage_95:.1%}')
 print('已生成 prediction_baseline_results.csv、prediction_baseline.png 与 model_evidence.json')
 print('这是比较后续模型的最低基线，不是论文结论。')
 `
