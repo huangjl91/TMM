@@ -101,14 +101,50 @@ if missing_columns:
     raise ValueError(f'找不到所选字段: {missing_columns}')
 
 work = raw[[TIME_COLUMN, TARGET_COLUMN]].copy()
+work['_source_row'] = np.arange(len(work)) + 2  # 默认首行为表头，与 Excel/CSV 可见行号一致
 work['_time'] = pd.to_datetime(work[TIME_COLUMN], errors='coerce')
 work['_target'] = pd.to_numeric(work[TARGET_COLUMN], errors='coerce')
-invalid_time = int(work['_time'].isna().sum())
-invalid_target = int(work['_target'].isna().sum())
-if invalid_time or invalid_target:
-    raise ValueError(f'时间字段有 {invalid_time} 个无效值，目标字段有 {invalid_target} 个无效值；请先清洗，基线不会静默删行')
-if bool(work['_time'].duplicated().any()):
-    raise ValueError('时间字段存在重复值；请先明确聚合规则，基线不会自行合并')
+issues = []
+for _, row in work[work['_time'].isna()].iterrows():
+    issues.append({
+        'row': int(row['_source_row']),
+        'column': TIME_COLUMN,
+        'value': str(row[TIME_COLUMN]),
+        'issue': 'invalid_time',
+        'suggestion': '改为可识别且统一的日期时间格式，例如 2026-01-01'
+    })
+for _, row in work[work['_target'].isna()].iterrows():
+    issues.append({
+        'row': int(row['_source_row']),
+        'column': TARGET_COLUMN,
+        'value': str(row[TARGET_COLUMN]),
+        'issue': 'invalid_number',
+        'suggestion': '改为纯数值；单位请放在字段名中，不要混入单元格'
+    })
+duplicate_mask = work[TIME_COLUMN].duplicated(keep=False)
+for _, row in work[duplicate_mask].iterrows():
+    issues.append({
+        'row': int(row['_source_row']),
+        'column': TIME_COLUMN,
+        'value': str(row[TIME_COLUMN]),
+        'issue': 'duplicate_time',
+        'suggestion': '确认重复记录应删除还是按求和、均值等业务规则聚合'
+    })
+if issues:
+    issue_report = {
+        'schemaVersion': 'tmm-data-quality-v1',
+        'generatedAt': datetime.now(timezone.utc).isoformat(),
+        'sourceFile': DATA_FILE.as_posix(),
+        'rowNumberConvention': '首行为表头，数据从第 2 行开始',
+        'timeColumn': TIME_COLUMN,
+        'targetColumn': TARGET_COLUMN,
+        'issueCount': len(issues),
+        'issues': issues
+    }
+    Path('data_quality_issues.json').write_text(json.dumps(issue_report, ensure_ascii=False, indent=2), encoding='utf-8')
+    preview = '；'.join(f"第{item['row']}行 {item['column']}={item['value']}（{item['issue']}）" for item in issues[:5])
+    remaining = f'；另有 {len(issues) - 5} 项' if len(issues) > 5 else ''
+    raise ValueError(f'数据质量检查未通过：{preview}{remaining}。详情与修改建议见 data_quality_issues.json')
 
 work = work.sort_values('_time', kind='stable').reset_index(drop=True)
 if len(work) < MIN_ROWS:

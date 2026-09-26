@@ -28,7 +28,7 @@ const args = process.env.PYTHON312 ? ['run_baseline.py'] : ['-3.12', 'run_baseli
 execFileSync(python, args, {
   cwd: root,
   stdio: 'inherit',
-  env: { ...process.env, MPLBACKEND: 'Agg', MPLCONFIGDIR: join(root, '.mplconfig') }
+  env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', MPLBACKEND: 'Agg', MPLCONFIGDIR: join(root, '.mplconfig') }
 })
 
 for (const name of ['prediction_baseline_results.csv', 'prediction_baseline.png', 'model_evidence.json']) {
@@ -84,7 +84,7 @@ writeFileSync(join(shortRoot, 'run_baseline.py'), shortCode, 'utf8')
 execFileSync(python, args, {
   cwd: shortRoot,
   stdio: 'pipe',
-  env: { ...process.env, MPLBACKEND: 'Agg', MPLCONFIGDIR: join(shortRoot, '.mplconfig') }
+  env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', MPLBACKEND: 'Agg', MPLCONFIGDIR: join(shortRoot, '.mplconfig') }
 })
 const shortManifest = JSON.parse(readFileSync(join(shortRoot, 'model_evidence.json'), 'utf8'))
 assert.equal(shortManifest.timeFrequency.inferred, 'MS')
@@ -92,3 +92,38 @@ assert.equal(shortManifest.algorithms.some((item) => item.id.startsWith('seasona
 assert.match(shortManifest.skippedModels[0].reason, /至少需要 24 行/)
 
 console.log('PASS  时间切分 → 基础与季节模型同集比较 → 指标选优 → 预测图 → 模型证据清单')
+
+const dirtyRoot = resolve('.tmp/prediction-dirty-data')
+const dirtyAttachmentDir = join(dirtyRoot, '附件')
+rmSync(dirtyRoot, { recursive: true, force: true })
+mkdirSync(dirtyAttachmentDir, { recursive: true })
+writeFileSync(
+  join(dirtyAttachmentDir, '脏数据.csv'),
+  '月份,用电负荷_kWh\n2025-01-01,100\n错误日期,abc\n2025-03-01,120\n2025-03-01,125\n2025-04-01,130\n2025-05-01,140\n2025-06-01,150\n2025-07-01,160\n2025-08-01,170\n2025-09-01,180\n2025-10-01,190\n2025-11-01,200\n',
+  'utf8'
+)
+const dirtyCode = buildPredictionBaselineCode(
+  { kind: 'data', name: '脏数据.csv', relPath: '附件/脏数据.csv' },
+  { xColumn: '月份', targetColumn: '用电负荷_kWh' }
+)
+assert.ok(dirtyCode)
+writeFileSync(join(dirtyRoot, 'run_baseline.py'), dirtyCode, 'utf8')
+let dirtyError = ''
+try {
+  execFileSync(python, args, {
+    cwd: dirtyRoot,
+    stdio: 'pipe',
+    env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', MPLBACKEND: 'Agg', MPLCONFIGDIR: join(dirtyRoot, '.mplconfig') }
+  })
+  assert.fail('脏数据不应通过预测检查')
+} catch (error) {
+  dirtyError = String(error.stderr || error.message)
+}
+assert.match(dirtyError, /第3行/)
+assert.match(dirtyError, /data_quality_issues\.json/)
+const issueReport = JSON.parse(readFileSync(join(dirtyRoot, 'data_quality_issues.json'), 'utf8'))
+assert.equal(issueReport.schemaVersion, 'tmm-data-quality-v1')
+assert.equal(issueReport.issueCount, 4)
+assert.deepEqual(issueReport.issues.map((item) => item.row), [3, 3, 4, 5])
+assert.deepEqual(new Set(issueReport.issues.map((item) => item.issue)), new Set(['invalid_time', 'invalid_number', 'duplicate_time']))
+console.log('PASS  脏数据 → 精确行号与原值 → 修改建议报告 → 阻止错误模型运行')
