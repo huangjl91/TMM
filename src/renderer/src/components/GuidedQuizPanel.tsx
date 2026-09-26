@@ -15,6 +15,7 @@ import { CandidateModelLecture } from './CandidateModelLecture'
 
 import type { DataFileProfile, SessionFileView } from '@shared/intake'
 import { buildRealDataPreviewCode, humanSize, isReadableTabularFile } from '@shared/intake'
+import { buildPredictionBaselineCode } from '@shared/prediction'
 
 interface Props {
   sessionId: number | null
@@ -46,6 +47,7 @@ export function GuidedQuizPanel({
   const [showKnowledge, setShowKnowledge] = useState(false)
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
   const [sandboxRunning, setSandboxRunning] = useState(false)
+  const [sandboxMessage, setSandboxMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [generatedImgUrl, setGeneratedImgUrl] = useState<string | null>(null)
   const [reanalyzing, setReanalyzing] = useState(false)
   const [categoryUpdating, setCategoryUpdating] = useState(false)
@@ -141,6 +143,13 @@ export function GuidedQuizPanel({
         sheetName: selectedSheet || null,
         xColumn: xColumn || null,
         yColumns
+      })
+    : null
+  const effectivePredictionCode = selectedDataFile && state?.categoryAssessment.active === 'prediction'
+    ? buildPredictionBaselineCode(selectedDataFile, {
+        sheetName: selectedSheet || null,
+        xColumn: xColumn || null,
+        targetColumn: yColumns[0] || null
       })
     : null
 
@@ -310,9 +319,9 @@ export function GuidedQuizPanel({
     }
   }
 
-  // 运行第四步的可视化代码
-  const handleRunVisualizationCode = async (): Promise<void> => {
-    const code = effectiveVisualizationCode
+  // 运行第四步的数据检查或预测基线代码
+  const handleRunVisualizationCode = async (mode: 'preview' | 'prediction' = 'preview'): Promise<void> => {
+    const code = mode === 'prediction' ? effectivePredictionCode : effectiveVisualizationCode
     if (!code) return
     if (onSendToSandbox) {
       onSendToSandbox(code)
@@ -321,16 +330,32 @@ export function GuidedQuizPanel({
     if (!sessionId) return
     setSandboxRunning(true)
     setGeneratedImgUrl(null)
+    setSandboxMessage(null)
     try {
       const run = await window.api.runCode({ sessionId, code })
-      const firstImg = run.artifacts.find(
+      if (!run.ok) {
+        setSandboxMessage({
+          ok: false,
+          text: run.error?.message || run.stderr || '运行失败，请检查数据字段与内容。'
+        })
+        return
+      }
+      const preferredName = mode === 'prediction' ? 'prediction_baseline.png' : 'real_data_preview.png'
+      const firstImg = run.artifacts.find((a) => a.name === preferredName) ?? run.artifacts.find(
         (a) => Boolean(a.dataUrl) || a.name.endsWith('.png') || a.name.endsWith('.jpg')
       )
       if (firstImg?.dataUrl) {
         setGeneratedImgUrl(firstImg.dataUrl)
       }
+      setSandboxMessage({
+        ok: true,
+        text: mode === 'prediction'
+          ? '预测基线已完成：结果表、验证图和 model_evidence.json 已写入本会话工作区。'
+          : '数据检查已完成：预览图和 evidence_manifest.json 已写入本会话工作区。'
+      })
     } catch (e) {
       console.error('Run visualization failed:', e)
+      setSandboxMessage({ ok: false, text: (e as Error).message })
     } finally {
       setSandboxRunning(false)
     }
@@ -814,14 +839,26 @@ export function GuidedQuizPanel({
                   以真实输出为准
                 </span>
               </div>
-              <button
-                onClick={handleRunVisualizationCode}
-                disabled={sandboxRunning || !effectiveVisualizationCode}
-                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-              >
-                <span>{sandboxRunning ? '⏳' : '🚀'}</span>
-                <span>{sandboxRunning ? '正在沙箱中运行出图...' : '读取真实数据后运行'}</span>
-              </button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  onClick={() => void handleRunVisualizationCode('preview')}
+                  disabled={sandboxRunning || !effectiveVisualizationCode}
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  <span>{sandboxRunning ? '⏳' : '🚀'}</span>
+                  <span>{sandboxRunning ? '正在沙箱中运行...' : '运行数据检查'}</span>
+                </button>
+                {state?.categoryAssessment.active === 'prediction' ? (
+                  <button
+                    onClick={() => void handleRunVisualizationCode('prediction')}
+                    disabled={sandboxRunning || !effectivePredictionCode}
+                    className="flex items-center gap-1.5 rounded-lg border border-sky-400/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-100 hover:bg-sky-500/25 disabled:opacity-50"
+                  >
+                    <span>📈</span>
+                    <span>{sandboxRunning ? '正在沙箱中运行...' : '运行预测基线'}</span>
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             {!effectiveVisualizationCode ? (
@@ -833,6 +870,12 @@ export function GuidedQuizPanel({
                 当前代码读取：{selectedDataFile?.relPath}
               </div>
             )}
+
+            {sandboxMessage ? (
+              <div className={`rounded-lg border px-3 py-2 text-xs ${sandboxMessage.ok ? 'border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-200' : 'border-rose-500/25 bg-rose-500/[0.06] text-rose-200'}`}>
+                {sandboxMessage.text}
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 text-xs">
               {readableDataFiles.length ? (
@@ -871,7 +914,14 @@ export function GuidedQuizPanel({
                         </label>
                       ))}
                     </div>
-                    {dataProfile ? <div className="mt-2 text-[11px] text-white/40">共 {dataProfile.rowCount} 行；运行后生成图表及 evidence_manifest.json 证据清单。</div> : null}
+                    {dataProfile ? (
+                      <div className="mt-2 text-[11px] text-white/40">
+                        共 {dataProfile.rowCount} 行；运行数据检查会生成 evidence_manifest.json。
+                        {state?.categoryAssessment.active === 'prediction'
+                          ? ` 预测基线使用“${yColumns[0] || '尚未选择'}”作为目标，并生成 model_evidence.json。`
+                          : ''}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -919,6 +969,16 @@ export function GuidedQuizPanel({
                 {effectiveVisualizationCode ?? curQ.visualization.pythonCode}
               </pre>
             </details>
+            {effectivePredictionCode ? (
+              <details className="rounded-lg border border-sky-500/20 bg-black/30 p-3 text-xs">
+                <summary className="cursor-pointer font-medium text-sky-200/70 hover:text-sky-100">
+                  查看可复现预测基线代码
+                </summary>
+                <pre className="mt-2 max-h-56 overflow-auto rounded bg-black/60 p-3 font-mono text-[11px] leading-relaxed text-sky-100/90">
+                  {effectivePredictionCode}
+                </pre>
+              </details>
+            ) : null}
           </div>
         ) : null}
 
