@@ -15,7 +15,11 @@ import { CandidateModelLecture } from './CandidateModelLecture'
 
 import type { DataFileProfile, SessionFileView } from '@shared/intake'
 import { buildRealDataPreviewCode, humanSize, isReadableTabularFile } from '@shared/intake'
-import { buildPredictionBaselineCode } from '@shared/prediction'
+import {
+  buildPredictionBaselineCode,
+  summarizePredictionEvidence,
+  type PredictionEvidenceSummary
+} from '@shared/prediction'
 
 interface Props {
   sessionId: number | null
@@ -48,6 +52,7 @@ export function GuidedQuizPanel({
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
   const [sandboxRunning, setSandboxRunning] = useState(false)
   const [sandboxMessage, setSandboxMessage] = useState<{ ok: boolean; text: string } | null>(null)
+  const [predictionEvidence, setPredictionEvidence] = useState<PredictionEvidenceSummary | null>(null)
   const [generatedImgUrl, setGeneratedImgUrl] = useState<string | null>(null)
   const [reanalyzing, setReanalyzing] = useState(false)
   const [categoryUpdating, setCategoryUpdating] = useState(false)
@@ -152,6 +157,10 @@ export function GuidedQuizPanel({
         targetColumn: yColumns[0] || null
       })
     : null
+
+  useEffect(() => {
+    setPredictionEvidence(null)
+  }, [sessionId, currentQIdx, selectedDataFile?.relPath, selectedSheet, xColumn, yColumns[0]])
 
   useEffect(() => {
     if (!selectedDataFile || !sessionId) {
@@ -331,6 +340,7 @@ export function GuidedQuizPanel({
     setSandboxRunning(true)
     setGeneratedImgUrl(null)
     setSandboxMessage(null)
+    if (mode === 'prediction') setPredictionEvidence(null)
     try {
       const run = await window.api.runCode({ sessionId, code })
       if (!run.ok) {
@@ -346,6 +356,12 @@ export function GuidedQuizPanel({
       )
       if (firstImg?.dataUrl) {
         setGeneratedImgUrl(firstImg.dataUrl)
+      }
+      if (mode === 'prediction' && run.artifacts.some((a) => a.name === 'model_evidence.json')) {
+        const evidenceFile = await window.api.readArtifact(sessionId, 'model_evidence.json')
+        if (evidenceFile.text) {
+          setPredictionEvidence(summarizePredictionEvidence(JSON.parse(evidenceFile.text)))
+        }
       }
       setSandboxMessage({
         ok: true,
@@ -978,6 +994,42 @@ export function GuidedQuizPanel({
                   {effectivePredictionCode}
                 </pre>
               </details>
+            ) : null}
+
+            {predictionEvidence ? (
+              <div className="space-y-3 rounded-lg border border-sky-500/25 bg-sky-500/[0.06] p-4 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-sky-200">本次运行的模型证据</span>
+                  <span className="rounded bg-sky-500/15 px-2 py-1 text-sky-100">
+                    按 {predictionEvidence.selectionMetric} 选择：{predictionEvidence.bestModel}
+                  </span>
+                </div>
+                <div className="grid gap-2 text-white/65 md:grid-cols-2">
+                  <div>训练：{predictionEvidence.trainRows} 行，{predictionEvidence.trainRange}</div>
+                  <div>测试：{predictionEvidence.testRows} 行，{predictionEvidence.testRange}</div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left">
+                    <thead className="text-white/45">
+                      <tr><th className="py-1 pr-3">模型</th><th className="py-1 pr-3">MAE</th><th className="py-1 pr-3">RMSE</th><th className="py-1">MAPE</th></tr>
+                    </thead>
+                    <tbody className="text-white/80">
+                      {predictionEvidence.metrics.map((metric) => (
+                        <tr key={metric.model} className={metric.model === predictionEvidence.bestModel ? 'text-sky-200' : ''}>
+                          <td className="py-1 pr-3 font-mono">{metric.model}</td>
+                          <td className="py-1 pr-3">{metric.mae.toFixed(4)}</td>
+                          <td className="py-1 pr-3">{metric.rmse.toFixed(4)}</td>
+                          <td className="py-1">{metric.mape === null ? '不适用' : `${metric.mape.toFixed(3)}%`}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded border border-white/10 bg-black/25 p-3 text-white/70">
+                  <div className="mb-1 font-semibold text-white/80">学生结果填写框架</div>
+                  <p>请依次说明：① 为什么采用时间顺序留出测试；② 三个模型在同一测试集上的指标差异；③ 为什么按 {predictionEvidence.selectionMetric} 选择 {predictionEvidence.bestModel}；④ 从残差图观察到的偏差方向或异常点；⑤ 当前比较仍有哪些局限。数字必须引用上表及 model_evidence.json。</p>
+                </div>
+              </div>
             ) : null}
           </div>
         ) : null}

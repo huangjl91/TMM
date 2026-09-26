@@ -6,6 +6,51 @@ export interface PredictionBaselineSelection extends DataPreviewSelection {
   testRatio?: number
 }
 
+export interface PredictionEvidenceSummary {
+  bestModel: string
+  selectionMetric: string
+  trainRange: string
+  testRange: string
+  trainRows: number
+  testRows: number
+  metrics: Array<{ model: string; mae: number; rmse: number; mape: number | null }>
+}
+
+/** 从沙箱证据文件提取可展示的客观结果；结构不完整时不猜测。 */
+export function summarizePredictionEvidence(value: unknown): PredictionEvidenceSummary | null {
+  if (!value || typeof value !== 'object') return null
+  const evidence = value as Record<string, unknown>
+  if (evidence.schemaVersion !== 'tmm-model-evidence-v1') return null
+  const selection = evidence.selection as Record<string, unknown> | undefined
+  const split = evidence.split as Record<string, unknown> | undefined
+  const byModel = evidence.metricsByModel as Record<string, Record<string, unknown>> | undefined
+  if (!selection || !split || !byModel || typeof selection.bestModel !== 'string') return null
+
+  const metrics = Object.entries(byModel).flatMap(([model, raw]) => {
+    const mae = Number(raw.MAE)
+    const rmse = Number(raw.RMSE)
+    const mapeRaw = raw.MAPE_percent
+    const mape = mapeRaw === null ? null : Number(mapeRaw)
+    return Number.isFinite(mae) && Number.isFinite(rmse) && (mape === null || Number.isFinite(mape))
+      ? [{ model, mae, rmse, mape }]
+      : []
+  })
+  if (!metrics.length) return null
+
+  const trainRows = Number(split.trainRows)
+  const testRows = Number(split.testRows)
+  if (!Number.isInteger(trainRows) || !Number.isInteger(testRows)) return null
+  return {
+    bestModel: selection.bestModel,
+    selectionMetric: typeof selection.metric === 'string' ? selection.metric : 'RMSE',
+    trainRange: `${String(split.trainStart)} 至 ${String(split.trainEnd)}`,
+    testRange: `${String(split.testStart)} 至 ${String(split.testEnd)}`,
+    trainRows,
+    testRows,
+    metrics
+  }
+}
+
 /**
  * 生成可复现的时间序列基线代码。基线只用于验收数据与评估流程，
  * 不会被包装成最终模型，也不会向论文自动写入结论。

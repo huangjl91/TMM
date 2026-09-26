@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { buildPredictionBaselineCode } from '../.tmp/prediction.mjs'
+import { buildPredictionBaselineCode, summarizePredictionEvidence } from '../.tmp/prediction.mjs'
 
 const root = resolve('.tmp/prediction-baseline')
 const attachmentDir = join(root, '附件')
@@ -54,5 +54,12 @@ assert.equal(manifest.outputs.length, 2)
 assert.ok(manifest.outputs.every((item) => item.sha256.length === 64))
 assert.equal(manifest.sourceSha256.length, 64)
 assert.equal(manifest.configurationSha256.length, 64)
+const summary = summarizePredictionEvidence(manifest)
+assert.ok(summary)
+assert.equal(summary.bestModel, manifest.selection.bestModel)
+assert.equal(summary.metrics.length, 3)
+assert.equal(summary.trainRows, 24)
+assert.equal(summary.testRows, 6)
+assert.equal(summarizePredictionEvidence({ schemaVersion: 'wrong' }), null)
 
 console.log('PASS  时间切分 → 三模型同集比较 → 指标选优 → 预测图 → 模型证据清单')
