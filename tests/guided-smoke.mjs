@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import {
   GUIDED_STEPS,
   detectProblemCategory,
+  explainProblemCategory,
   extractProblemElements,
   buildDefaultGuidedQuestions,
   synthesizeGuidedDraft
@@ -14,6 +15,17 @@ assert.equal(detectProblemCategory('针对不同配送中心进行最优化调�
 assert.equal(detectProblemCategory('对各企业进行综合评价打分与排名优选'), 'evaluation')
 assert.equal(detectProblemCategory('根据过去三年历史数据预测未来三个月的用电负荷变化走势'), 'prediction')
 console.log('PASS  题目类型自动识别 (运筹规划 / 综合评价 / 时序预测)')
+
+const assessment = explainProblemCategory('根据历史负荷时间序列预测未来三个月趋势并分析残差')
+assert.equal(assessment.detected, 'prediction')
+assert.ok(assessment.reasons.some((reason) => reason.includes('预测') || reason.includes('时间序列')))
+const overridden = buildDefaultGuidedQuestions(1, '预测未来负荷趋势', '', 'optimization')
+assert.equal(overridden.knowledge.category, 'optimization')
+assert.ok(overridden.candidateModels.some((model) => /规划|MILP|线性/.test(model.name + model.aka)))
+const vague = buildDefaultGuidedQuestions(1, '输入附件一，输出计算结果')
+assert.equal(vague.knowledge.category, 'prediction')
+assert.ok(vague.candidateModels.some((model) => /ARIMA|Prophet|预测/.test(model.name + model.aka)))
+console.log('PASS  题型判断可解释，并允许学生覆盖后重建候选模型')
 
 // 2. 4 阶梯结构与梯度由浅入深校验
 const { knowledge, questions, candidateModels } = buildDefaultGuidedQuestions(1, '建立最优化调度模型使得总成本最小')

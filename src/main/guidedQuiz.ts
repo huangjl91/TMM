@@ -1,4 +1,5 @@
 import { completeText } from './llm/openai-compat'
+import { createHash } from 'node:crypto'
 import {
   loadSettings,
   logAiUsage,
@@ -8,7 +9,8 @@ import {
   saveGuidedAnalysis,
   saveStageOutputs,
   latestStageOutputs,
-  listSessionFiles
+  listSessionFiles,
+  clearGuidedChoices
 } from './repo'
 import { getApiKey } from './secrets'
 import { questionsOf } from './stage'
@@ -16,13 +18,15 @@ import { parseQuestions } from '../shared/questions'
 import {
   buildDefaultGuidedQuestions,
   enforceEvidenceSafeQuestions,
+  explainProblemCategory,
   extractProblemElements,
   synthesizeGuidedDraft,
-  getCandidateModelsForQuestion,
   type CandidateModelInfo,
+  type CategoryAssessment,
   type AiAdvice,
   type GuidedOption,
   type GuidedQuestion,
+  type GuidedCategory,
   type GuidedSessionState,
   type GuidedStep,
   type ProblemElements,
@@ -35,7 +39,7 @@ import { sliceJsonObject } from '../shared/agent'
 function getProblemContext(
   sessionId: number,
   questionIdx: number
-): { brief: string; fullText: string; sourceReady: boolean } {
+): { brief: string; fullText: string; sourceReady: boolean; sourceFingerprint: string } {
   let brief = ''
   let fullText = ''
 
@@ -60,7 +64,16 @@ function getProblemContext(
   }
 
   const sourceReady = Boolean(brief.trim() || fullText.trim())
-  return { brief: brief || `问题 ${questionIdx}`, fullText, sourceReady }
+  const normalizedBrief = brief || `问题 ${questionIdx}`
+  const sourceFingerprint = createHash('sha256')
+    .update(`${normalizedBrief}\n${fullText}`)
+    .digest('hex')
+  return { brief: normalizedBrief, fullText, sourceReady, sourceFingerprint }
+}
+
+interface AnalysisMetadata {
+  _sourceFingerprint?: string
+  _categoryOverride?: GuidedCategory
 }
 
 function loadOrGenerateAnalysis(
@@ -74,29 +87,60 @@ function loadOrGenerateAnalysis(
   candidateModels: CandidateModelInfo[]
   brief: string
   sourceReady: boolean
+  categoryAssessment: CategoryAssessment
 } {
-  const { brief, fullText, sourceReady } = getProblemContext(sessionId, questionIdx)
-  const candidateModels = getCandidateModelsForQuestion(questionIdx, brief, fullText)
+  const { brief, fullText, sourceReady, sourceFingerprint } = getProblemContext(sessionId, questionIdx)
+  const detected = explainProblemCategory(`${brief}\n${fullText}`)
+  let categoryOverride: GuidedCategory | undefined
+  const cached = getGuidedAnalysis(sessionId, questionIdx)
 
-  if (!forceRefresh) {
-    const cached = getGuidedAnalysis(sessionId, questionIdx)
-    if (cached) {
-      try {
+  if (cached) {
+    try {
+      const rawElements = JSON.parse(cached.elementsJson) as ProblemElements & AnalysisMetadata
+      categoryOverride = rawElements._categoryOverride
+      if (!forceRefresh && rawElements._sourceFingerprint === sourceFingerprint) {
         const knowledge = JSON.parse(cached.knowledgeJson) as ProblemKnowledge
         const questions = enforceEvidenceSafeQuestions(
           JSON.parse(cached.questionsJson) as Record<GuidedStep, GuidedQuestion>
         )
-        const elements = JSON.parse(cached.elementsJson) as ProblemElements
-        return { knowledge, questions, elements, candidateModels, brief, sourceReady }
-      } catch (e) {
-        console.warn('[guidedQuiz] Failed to parse cached analysis:', e)
+        const candidateModels = buildDefaultGuidedQuestions(
+          questionIdx,
+          brief,
+          fullText,
+          categoryOverride ?? detected.detected
+        ).candidateModels
+        return {
+          knowledge,
+          questions,
+          elements: rawElements,
+          candidateModels,
+          brief,
+          sourceReady,
+          categoryAssessment: {
+            ...detected,
+            active: categoryOverride ?? detected.detected,
+            overridden: Boolean(categoryOverride)
+          }
+        }
       }
+      if (rawElements._sourceFingerprint !== sourceFingerprint) {
+        clearGuidedChoices(sessionId, questionIdx)
+      }
+    } catch (e) {
+      console.warn('[guidedQuiz] Failed to parse cached analysis:', e)
     }
   }
 
   // 动态抽取题目核心要素与定制 4 阶梯选择题
-  const elements = extractProblemElements(brief, fullText)
-  const { knowledge, questions } = buildDefaultGuidedQuestions(questionIdx, brief, fullText)
+  const elements = extractProblemElements(brief, fullText) as ProblemElements & AnalysisMetadata
+  elements._sourceFingerprint = sourceFingerprint
+  if (categoryOverride) elements._categoryOverride = categoryOverride
+  const { knowledge, questions, candidateModels } = buildDefaultGuidedQuestions(
+    questionIdx,
+    brief,
+    fullText,
+    categoryOverride
+  )
 
   saveGuidedAnalysis(
     sessionId,
@@ -106,12 +150,24 @@ function loadOrGenerateAnalysis(
     JSON.stringify(elements)
   )
 
-  return { knowledge, questions, elements, candidateModels, brief, sourceReady }
+  return {
+    knowledge,
+    questions,
+    elements,
+    candidateModels,
+    brief,
+    sourceReady,
+    categoryAssessment: {
+      ...detected,
+      active: categoryOverride ?? detected.detected,
+      overridden: Boolean(categoryOverride)
+    }
+  }
 }
 
 export function getGuidedState(sessionId: number, questionIdx: number): GuidedSessionState {
   const qIdx = Math.max(1, questionIdx)
-  const { knowledge, questions, elements, candidateModels, brief, sourceReady } = loadOrGenerateAnalysis(sessionId, qIdx)
+  const { knowledge, questions, elements, candidateModels, brief, sourceReady, categoryAssessment } = loadOrGenerateAnalysis(sessionId, qIdx)
   const stored = getGuidedChoices(sessionId, qIdx) as Partial<Record<GuidedStep, StepChoice>>
 
   const stepsOrder: GuidedStep[] = ['intuition', 'model_select', 'formulation', 'visualization']
@@ -139,6 +195,7 @@ export function getGuidedState(sessionId: number, questionIdx: number): GuidedSe
     questionLabel: `问题 ${qIdx}`,
     questionBrief: brief,
     sourceReady,
+    categoryAssessment,
     currentStep,
     completed,
     knowledge,
@@ -181,12 +238,55 @@ export function handleGuidedChoose(
   return getGuidedState(sessionId, questionIdx)
 }
 
+export function handleGuidedCategory(
+  sessionId: number,
+  questionIdx: number,
+  category: GuidedCategory | 'auto'
+): GuidedSessionState {
+  const { brief, fullText, sourceReady, sourceFingerprint } = getProblemContext(sessionId, questionIdx)
+  if (!sourceReady) throw new Error('请先导入题目或描述题目，再修正题型。')
+  const override = category === 'auto' ? undefined : category
+  const elements = extractProblemElements(brief, fullText) as ProblemElements & AnalysisMetadata
+  elements._sourceFingerprint = sourceFingerprint
+  if (override) elements._categoryOverride = override
+  const { knowledge, questions } = buildDefaultGuidedQuestions(questionIdx, brief, fullText, override)
+  saveGuidedAnalysis(
+    sessionId,
+    questionIdx,
+    JSON.stringify(knowledge),
+    JSON.stringify(questions),
+    JSON.stringify(elements)
+  )
+  clearGuidedChoices(sessionId, questionIdx)
+  logAiUsage(
+    sessionId,
+    null,
+    'guided_category_override',
+    category === 'auto' ? `问题 ${questionIdx} 恢复自动题型判断` : `问题 ${questionIdx} 由学生修正为 ${category}`,
+    null,
+    'guided-engine'
+  )
+  return getGuidedState(sessionId, questionIdx)
+}
+
 export async function handleGuidedReanalyze(
   sessionId: number,
   questionIdx: number
 ): Promise<GuidedSessionState> {
-  const { brief, fullText, sourceReady } = getProblemContext(sessionId, questionIdx)
+  const { brief, fullText, sourceReady, sourceFingerprint } = getProblemContext(sessionId, questionIdx)
   if (!sourceReady) throw new Error('没有可分析的题目文本，请先导入或描述题目。')
+  const existing = getGuidedAnalysis(sessionId, questionIdx)
+  if (existing) {
+    try {
+      const metadata = JSON.parse(existing.elementsJson) as AnalysisMetadata
+      if (metadata._categoryOverride) {
+        loadOrGenerateAnalysis(sessionId, questionIdx, true)
+        return getGuidedState(sessionId, questionIdx)
+      }
+    } catch {
+      // 损坏缓存交给后续重建路径处理。
+    }
+  }
   const s = loadSettings()
   const key = getApiKey(s.providerId)
 
@@ -257,6 +357,18 @@ export async function handleGuidedReanalyze(
       if (jsonText) {
         const parsed = JSON.parse(jsonText)
         if (parsed.elements && parsed.knowledge && parsed.questions) {
+          parsed.elements._sourceFingerprint = sourceFingerprint
+          const previous = getGuidedAnalysis(sessionId, questionIdx)
+          if (previous) {
+            try {
+              const previousElements = JSON.parse(previous.elementsJson) as AnalysisMetadata
+              if (previousElements._categoryOverride) {
+                parsed.elements._categoryOverride = previousElements._categoryOverride
+              }
+            } catch {
+              // 旧缓存损坏时忽略元数据，后续仍可用本地规则重建。
+            }
+          }
           const vis = parsed.questions?.visualization?.visualization
           if (vis) {
             vis.expectedFinding = '运行真实数据后验证：趋势、差异、异常点及其不确定性。'

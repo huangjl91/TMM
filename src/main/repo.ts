@@ -513,6 +513,11 @@ export function getGuidedChoices(
   return out
 }
 
+export function clearGuidedChoices(sessionId: number, questionIdx: number): void {
+  getDb().prepare('DELETE FROM guided_choices WHERE session_id = ? AND question_idx = ?').run(sessionId, questionIdx)
+  touchSession(sessionId)
+}
+
 export function saveGuidedChoice(
   sessionId: number,
   questionIdx: number,

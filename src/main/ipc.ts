@@ -31,7 +31,7 @@ import { currentStageId, openStage, questionsOf, stageCard, stageViews, submitSt
 import { compilePaper, openPaperPdf, paperDraft, readPaperPdf, saveDraft, stopCompile } from './latex/compile'
 import { usageSummary } from './compliance/collect'
 import { exportUsagePdf, openUsagePdf, usagePdf } from './compliance/export'
-import { getGuidedState, handleGuidedAskAi, handleGuidedChoose, handleGuidedReanalyze, handleGuidedSync } from './guidedQuiz'
+import { getGuidedState, handleGuidedAskAi, handleGuidedCategory, handleGuidedChoose, handleGuidedReanalyze, handleGuidedSync } from './guidedQuiz'
 import { methodById } from '../shared/methods'
 import { ERROR_ESCALATE_STREAK, errorGuide, plotDigest, plotHints, sameErrorStreak, type PlotAnswers } from '../shared/plots'
 import type { ArtifactContent, RunPayload, RunRecord } from '../shared/sandbox'
@@ -48,6 +48,7 @@ import {
   type FreeSendPayload,
   type GuidedAskAiPayload,
   type GuidedChoosePayload,
+  type GuidedCategoryPayload,
   type GuidedGetPayload,
   type GuidedReanalyzePayload,
   type GuidedSyncPayload,
@@ -349,5 +350,13 @@ export function registerIpc(): void {
     const sid = needSession(payload?.sessionId)
     const qIdx = Number.isInteger(payload?.questionIdx) ? Number(payload.questionIdx) : 1
     return handleGuidedReanalyze(sid, qIdx)
+  })
+
+  ipcMain.handle(IPC.GuidedCategorySet, (_e, payload: GuidedCategoryPayload): GuidedSessionState => {
+    const sid = needSession(payload?.sessionId)
+    const qIdx = Number.isInteger(payload?.questionIdx) ? Number(payload.questionIdx) : 1
+    const allowed = new Set(['auto', 'prediction', 'optimization', 'evaluation'])
+    if (!allowed.has(payload?.category)) throw new Error('不支持的题型')
+    return handleGuidedCategory(sid, qIdx, payload.category)
   })
 }

@@ -14,6 +14,7 @@ import {
   type FreeSendPayload,
   type GuidedAskAiPayload,
   type GuidedChoosePayload,
+  type GuidedCategoryPayload,
   type ProblemFileContent,
   type ProviderPreset,
   type PlotAnswerPayload,
@@ -98,6 +99,8 @@ const api = {
     ipcRenderer.invoke(IPC.GuidedSync, { sessionId, questionIdx }),
   reanalyzeGuided: (sessionId: number, questionIdx: number): Promise<GuidedSessionState> =>
     ipcRenderer.invoke(IPC.GuidedReanalyze, { sessionId, questionIdx }),
+  setGuidedCategory: (payload: GuidedCategoryPayload): Promise<GuidedSessionState> =>
+    ipcRenderer.invoke(IPC.GuidedCategorySet, payload),
   onStream: (cb: (e: StreamEvent) => void): (() => void) => {
     const listener = (_ev: IpcRendererEvent, e: StreamEvent): void => cb(e)
     ipcRenderer.on(IPC.ChatStream, listener)

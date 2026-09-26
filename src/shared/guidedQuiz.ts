@@ -1,7 +1,15 @@
-import { getCandidateModelsForQuestion } from './candidateModels'
+import { buildGeneralCandidateModels, getCandidateModelsForQuestion } from './candidateModels'
 export { getCandidateModelsForQuestion } from './candidateModels'
 
 export type GuidedStep = 'intuition' | 'model_select' | 'formulation' | 'visualization'
+export type GuidedCategory = 'prediction' | 'optimization' | 'evaluation'
+
+export interface CategoryAssessment {
+  detected: GuidedCategory
+  active: GuidedCategory
+  overridden: boolean
+  reasons: string[]
+}
 
 export interface GuidedStepMeta {
   key: GuidedStep
@@ -126,6 +134,7 @@ export interface GuidedSessionState {
   questionBrief: string
   /** 是否已有真实题目文本；false 时不得生成候选模型、代码或结论。 */
   sourceReady: boolean
+  categoryAssessment: CategoryAssessment
   currentStep: GuidedStep
   completed: boolean
   knowledge: ProblemKnowledge
@@ -266,6 +275,22 @@ export function detectProblemCategory(text: string): ProblemKnowledge['category'
     return 'machine_learning'
   }
   return 'prediction'
+}
+
+export function explainProblemCategory(text: string): Omit<CategoryAssessment, 'active' | 'overridden'> {
+  const detectedRaw = detectProblemCategory(text)
+  const detected: GuidedCategory =
+    detectedRaw === 'optimization' || detectedRaw === 'evaluation' ? detectedRaw : 'prediction'
+  const patterns: Record<GuidedCategory, RegExp> = {
+    optimization: /微网|调度|路径|分配|最大化|最小化|成本|效益|约束|规划|指派/gi,
+    prediction: /预测|趋势|未来|走势|时序|时间序列|外推|回归|拟合|残差|动态|微分/gi,
+    evaluation: /评价|打分|排序|优选|权重|指标|topsis|熵权|层次分析|ahp/gi
+  }
+  const hits = Array.from(new Set(text.match(patterns[detected]) ?? [])).slice(0, 6)
+  return {
+    detected,
+    reasons: hits.length ? hits.map((word) => `题目出现“${word}”`) : ['未命中强特征词，暂按通用数据预测方向处理']
+  }
 }
 
 /** 为微网电力调控赛题构建高度贴合第一性原理与赛题要求的专属引导 */
@@ -779,23 +804,29 @@ plt.show()
 export function buildDefaultGuidedQuestions(
   questionIdx: number,
   briefText: string,
-  fullProblemText = ''
+  fullProblemText = '',
+  categoryOverride?: GuidedCategory
 ): {
   knowledge: ProblemKnowledge
   questions: Record<GuidedStep, GuidedQuestion>
   candidateModels: CandidateModelInfo[]
 } {
   const combined = `${briefText}\n${fullProblemText}`
-  const candidateModels = getCandidateModelsForQuestion(questionIdx, briefText, fullProblemText)
+  const detectedCategory = explainProblemCategory(combined).detected
+  const activeCategory = categoryOverride ?? detectedCategory
+  const isMicrogrid = /微网|外部电网|储能|光伏|电池|充放电|电量|购电|小区负载|分时电价|soc/i.test(combined)
+  const candidateModels = !categoryOverride && isMicrogrid
+    ? getCandidateModelsForQuestion(questionIdx, briefText, fullProblemText)
+    : buildGeneralCandidateModels(questionIdx, activeCategory)
 
   // 1. 优先检测是否为微电网电力调控赛题
-  if (/微网|外部电网|储能|光伏|电池|充放电|电量|购电|小区负载|分时电价|soc/i.test(combined)) {
+  if (!categoryOverride && isMicrogrid) {
     const built = buildMicrogridGuidedQuestions(questionIdx, briefText, fullProblemText)
     built.questions = enforceEvidenceSafeQuestions(built.questions)
     return built
   }
 
-  const cat = detectProblemCategory(combined)
+  const cat = activeCategory
 
   if (cat === 'optimization') {
     const knowledge: ProblemKnowledge = {

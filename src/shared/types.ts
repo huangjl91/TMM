@@ -63,6 +63,7 @@ export const IPC = {
   GuidedAskAi: 'guided:askAi',
   GuidedSync: 'guided:sync',
   GuidedReanalyze: 'guided:reanalyze',
+  GuidedCategorySet: 'guided:category:set',
   /** Python/TeX 是异步探测的，探完要通知渲染层重新拉一次 */
   RuntimeUpdated: 'runtime:updated'
 } as const
@@ -214,6 +215,12 @@ export interface GuidedSyncPayload {
 export interface GuidedReanalyzePayload {
   sessionId: number
   questionIdx: number
+}
+
+export interface GuidedCategoryPayload {
+  sessionId: number
+  questionIdx: number
+  category: 'auto' | 'prediction' | 'optimization' | 'evaluation'
 }
 
 export interface ProblemFileContent {

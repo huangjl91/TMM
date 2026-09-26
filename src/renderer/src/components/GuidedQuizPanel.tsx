@@ -48,6 +48,7 @@ export function GuidedQuizPanel({
   const [sandboxRunning, setSandboxRunning] = useState(false)
   const [generatedImgUrl, setGeneratedImgUrl] = useState<string | null>(null)
   const [reanalyzing, setReanalyzing] = useState(false)
+  const [categoryUpdating, setCategoryUpdating] = useState(false)
   const [problemFile, setProblemFile] = useState<ProblemFileContent | null>(null)
   const [pdfExpanded, setPdfExpanded] = useState(false)
 
@@ -86,6 +87,12 @@ export function GuidedQuizPanel({
         questionLabel: `问题 ${currentQIdx}`,
         questionBrief: '（尚未导入题目，先按经典数模题型体验引导做题流程）',
         sourceReady: false,
+        categoryAssessment: {
+          detected: 'prediction',
+          active: 'prediction',
+          overridden: false,
+          reasons: ['等待真实题目文本']
+        },
         currentStep: 'intuition',
         completed: false,
         knowledge,
@@ -140,6 +147,27 @@ export function GuidedQuizPanel({
       console.error('Failed to reanalyze guided questions:', e)
     } finally {
       setReanalyzing(false)
+    }
+  }
+
+  const handleCategoryChange = async (category: 'auto' | 'prediction' | 'optimization' | 'evaluation'): Promise<void> => {
+    if (!sessionId) return
+    setCategoryUpdating(true)
+    try {
+      const nextState = await window.api.setGuidedCategory({
+        sessionId,
+        questionIdx: currentQIdx,
+        category
+      })
+      setState(nextState)
+      setActiveStep('intuition')
+      setSelectedKey('')
+      setUserNote('')
+      setAiAdvice(null)
+    } catch (e) {
+      console.error('Failed to update guided category:', e)
+    } finally {
+      setCategoryUpdating(false)
     }
   }
 
@@ -407,6 +435,42 @@ export function GuidedQuizPanel({
             onToggleExpand={() => setPdfExpanded((v) => !v)}
             onOpenExternal={sessionId ? () => window.api.openProblemPdf(sessionId) : undefined}
           />
+
+          {state?.categoryAssessment ? (
+            <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/[0.05] p-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <span className="font-semibold text-indigo-200">题型判断：</span>
+                  <span className="text-white/80">
+                    {{ optimization: '优化决策', prediction: '预测分析', evaluation: '综合评价' }[state.categoryAssessment.active]}
+                  </span>
+                  {state.categoryAssessment.overridden ? (
+                    <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-300">学生已修正</span>
+                  ) : null}
+                  <div className="mt-1 text-[11px] text-white/45">
+                    判断依据：{state.categoryAssessment.reasons.join('；')}
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-white/55">
+                  <span>发现判断不对：</span>
+                  <select
+                    value={state.categoryAssessment.overridden ? state.categoryAssessment.active : 'auto'}
+                    disabled={categoryUpdating}
+                    onChange={(e) => void handleCategoryChange(e.target.value as 'auto' | 'prediction' | 'optimization' | 'evaluation')}
+                    className="rounded-md border border-white/10 bg-[#11151d] px-2 py-1 text-white outline-none focus:border-indigo-400"
+                  >
+                    <option value="auto">自动判断</option>
+                    <option value="optimization">优化决策</option>
+                    <option value="prediction">预测分析</option>
+                    <option value="evaluation">综合评价</option>
+                  </select>
+                </label>
+              </div>
+              {state.categoryAssessment.overridden ? (
+                <div className="mt-2 text-[11px] text-amber-200/80">修改题型后，旧选择已清空，候选模型与四阶梯问题已重新生成。</div>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* 赛题深度解构与要素看板 */}
           {state?.elements ? (
