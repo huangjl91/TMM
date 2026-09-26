@@ -413,8 +413,8 @@ export function GuidedQuizPanel({
             </button>
           ) : null}
 
-          {/* 问题切换轴 */}
-          <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-black/40 p-1">
+          {/* 只有多个小问时才显示切换器；单独一个“问题 1”没有操作价值 */}
+          {qList.length > 1 ? <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-black/40 p-1">
             {qList.map((q) => {
               const active = q.idx === currentQIdx
               return (
@@ -431,7 +431,7 @@ export function GuidedQuizPanel({
                 </button>
               )
             })}
-          </div>
+          </div> : null}
         </div>
       </div>
 
