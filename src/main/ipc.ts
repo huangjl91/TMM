@@ -24,7 +24,7 @@ import {
   unpinMethod
 } from './repo'
 import { readArtifact, runCode, stop as stopRun } from './sandbox'
-import { filesOf, intake, openProblemPdf, readProblemPdf } from './intake'
+import { filesOf, inspectDataFile, intake, openProblemPdf, readProblemPdf } from './intake'
 import { adopt, askHint, abort, send } from './agent/coach'
 import { abortFree, sendFree } from './agent/freechat'
 import { currentStageId, openStage, questionsOf, stageCard, stageViews, submitStage } from './stage'
@@ -35,7 +35,7 @@ import { getGuidedState, handleGuidedAskAi, handleGuidedCategory, handleGuidedCh
 import { methodById } from '../shared/methods'
 import { ERROR_ESCALATE_STREAK, errorGuide, plotDigest, plotHints, sameErrorStreak, type PlotAnswers } from '../shared/plots'
 import type { ArtifactContent, RunPayload, RunRecord } from '../shared/sandbox'
-import type { IntakeResult, SessionFileView } from '../shared/intake'
+import type { DataFileProfile, IntakeResult, SessionFileView } from '../shared/intake'
 import type { QuestionFocus } from '../shared/questions'
 import type { AdoptPayload, StageView, SubmissionPayload } from '../shared/agent'
 import type { CompileResult, PaperDraft } from '../shared/latex'
@@ -50,6 +50,7 @@ import {
   type GuidedChoosePayload,
   type GuidedCategoryPayload,
   type GuidedGetPayload,
+  type DataInspectPayload,
   type GuidedReanalyzePayload,
   type GuidedSyncPayload,
   type PlotAnswerPayload,
@@ -125,6 +126,9 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.SessionGet, (_e, id: number) => (Number.isInteger(id) ? getSessionMessages(id) : []))
   ipcMain.handle(IPC.SessionIntake, (_e): Promise<IntakeResult | null> => intake())
   ipcMain.handle(IPC.SessionFiles, (_e, sessionId: unknown): SessionFileView[] => filesOf(needSession(sessionId)))
+  ipcMain.handle(IPC.SessionDataInspect, (_e, payload: DataInspectPayload): Promise<DataFileProfile> =>
+    inspectDataFile(needSession(payload?.sessionId), String(payload?.relPath ?? ''), payload?.sheetName)
+  )
   ipcMain.handle(IPC.SessionProblemPdf, (_e, sessionId: unknown) => readProblemPdf(needSession(sessionId)))
   ipcMain.handle(IPC.SessionProblemOpen, (_e, sessionId: unknown) => openProblemPdf(needSession(sessionId)))
   ipcMain.handle(IPC.SessionQuestions, (_e, sessionId: unknown): QuestionFocus => {

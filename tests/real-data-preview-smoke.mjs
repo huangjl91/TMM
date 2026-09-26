@@ -24,7 +24,9 @@ function run(name, relPath, createCode) {
   })
   assert.ok(stdout.trim().length > 0)
   assert.ok(existsSync(join(root, 'real_data_preview.png')))
+  assert.ok(existsSync(join(root, 'evidence_manifest.json')))
   rmSync(join(root, 'real_data_preview.png'), { force: true })
+  rmSync(join(root, 'evidence_manifest.json'), { force: true })
   console.log(`PASS  ${name} 真实读取并生成图表`)
 }
 

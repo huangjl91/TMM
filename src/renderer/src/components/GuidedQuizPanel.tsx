@@ -13,7 +13,7 @@ import type { ProblemFileContent } from '@shared/types'
 import { A4ProblemViewer } from './A4ProblemViewer'
 import { CandidateModelLecture } from './CandidateModelLecture'
 
-import type { SessionFileView } from '@shared/intake'
+import type { DataFileProfile, SessionFileView } from '@shared/intake'
 import { buildRealDataPreviewCode, humanSize, isReadableTabularFile } from '@shared/intake'
 
 interface Props {
@@ -51,6 +51,11 @@ export function GuidedQuizPanel({
   const [categoryUpdating, setCategoryUpdating] = useState(false)
   const [problemFile, setProblemFile] = useState<ProblemFileContent | null>(null)
   const [pdfExpanded, setPdfExpanded] = useState(false)
+  const [selectedDataRelPath, setSelectedDataRelPath] = useState('')
+  const [selectedSheet, setSelectedSheet] = useState('')
+  const [dataProfile, setDataProfile] = useState<DataFileProfile | null>(null)
+  const [xColumn, setXColumn] = useState('')
+  const [yColumns, setYColumns] = useState<string[]>([])
 
   const currentQIdx = activeQuestionIdx > 0 ? activeQuestionIdx : 1
 
@@ -129,8 +134,40 @@ export function GuidedQuizPanel({
   )
   const curQ: GuidedQuestion = state?.questions?.[activeStep] || stepQuestions[activeStep]
   const curModels = state?.candidateModels?.length ? state.candidateModels : fallbackModels
-  const selectedDataFile = files?.find(isReadableTabularFile)
-  const effectiveVisualizationCode = selectedDataFile ? buildRealDataPreviewCode(selectedDataFile) : null
+  const readableDataFiles = files?.filter(isReadableTabularFile) ?? []
+  const selectedDataFile = readableDataFiles.find((file) => file.relPath === selectedDataRelPath) ?? readableDataFiles[0]
+  const effectiveVisualizationCode = selectedDataFile
+    ? buildRealDataPreviewCode(selectedDataFile, {
+        sheetName: selectedSheet || null,
+        xColumn: xColumn || null,
+        yColumns
+      })
+    : null
+
+  useEffect(() => {
+    if (!selectedDataFile || !sessionId) {
+      setDataProfile(null)
+      return
+    }
+    if (selectedDataRelPath !== selectedDataFile.relPath) setSelectedDataRelPath(selectedDataFile.relPath)
+    let active = true
+    window.api
+      .inspectDataFile(sessionId, selectedDataFile.relPath, selectedSheet || undefined)
+      .then((profile) => {
+        if (!active) return
+        setDataProfile(profile)
+        if (!selectedSheet && profile.activeSheet) setSelectedSheet(profile.activeSheet)
+        setXColumn((current) => current && profile.columns.includes(current) ? current : (profile.columns[0] ?? ''))
+        setYColumns((current) => {
+          const kept = current.filter((column) => profile.numericColumns.includes(column))
+          return kept.length ? kept : profile.numericColumns.filter((column) => column !== profile.columns[0]).slice(0, 4)
+        })
+      })
+      .catch((error: unknown) => {
+        if (active) console.error('Failed to inspect data attachment:', error)
+      })
+    return () => { active = false }
+  }, [sessionId, selectedDataFile?.relPath, selectedSheet])
 
   // 深度重新解构本问（结合赛题全文重新提取机理并刷新引导题）
   const handleReanalyze = async (): Promise<void> => {
@@ -798,6 +835,46 @@ export function GuidedQuizPanel({
             )}
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 text-xs">
+              {readableDataFiles.length ? (
+                <div className="space-y-3 rounded-lg border border-sky-500/20 bg-black/25 p-3 md:col-span-2">
+                  <div className="font-semibold text-sky-300">真实数据字段映射</div>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <label className="space-y-1 text-white/55">
+                      <span>数据附件</span>
+                      <select value={selectedDataFile?.relPath ?? ''} onChange={(e) => { setSelectedDataRelPath(e.target.value); setSelectedSheet(''); setDataProfile(null) }} className="w-full rounded border border-white/10 bg-[#11151d] px-2 py-1.5 text-white">
+                        {readableDataFiles.map((file) => <option key={file.id} value={file.relPath}>{file.name}</option>)}
+                      </select>
+                    </label>
+                    {dataProfile?.sheets.length ? (
+                      <label className="space-y-1 text-white/55">
+                        <span>Excel 工作表</span>
+                        <select value={selectedSheet} onChange={(e) => setSelectedSheet(e.target.value)} className="w-full rounded border border-white/10 bg-[#11151d] px-2 py-1.5 text-white">
+                          {dataProfile.sheets.map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}
+                        </select>
+                      </label>
+                    ) : null}
+                    <label className="space-y-1 text-white/55">
+                      <span>横轴字段</span>
+                      <select value={xColumn} onChange={(e) => setXColumn(e.target.value)} className="w-full rounded border border-white/10 bg-[#11151d] px-2 py-1.5 text-white">
+                        <option value="">样本序号</option>
+                        {dataProfile?.columns.map((column) => <option key={column} value={column}>{column}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-white/55">纵轴数值字段（可多选）</div>
+                    <div className="flex flex-wrap gap-2">
+                      {dataProfile?.numericColumns.map((column) => (
+                        <label key={column} className="flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-white/75">
+                          <input type="checkbox" checked={yColumns.includes(column)} onChange={(e) => setYColumns((current) => e.target.checked ? [...current, column] : current.filter((item) => item !== column))} />
+                          <span>{column}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {dataProfile ? <div className="mt-2 text-[11px] text-white/40">共 {dataProfile.rowCount} 行；运行后生成图表及 evidence_manifest.json 证据清单。</div> : null}
+                  </div>
+                </div>
+              ) : null}
               <div className="space-y-1 rounded-lg border border-white/10 bg-black/30 p-3">
                 <span className="text-white/40">1. 推荐学术图表类型</span>
                 <p className="font-medium text-emerald-300">{curQ.visualization.plotType}</p>

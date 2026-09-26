@@ -185,12 +185,25 @@ check('CSV 附件生成真实路径读取代码，不生成模拟数组', () => 
   assert.ok(code.includes('Path("附件/观测.csv")'))
   assert.ok(code.includes('pd.read_csv(DATA_FILE)'))
   assert.ok(!code.includes('np.random'))
+  assert.ok(code.includes('evidence_manifest.json'))
+})
+
+check('字段映射写入真实绘图代码与证据清单', () => {
+  const data = file({ kind: 'data', name: '观测.xlsx', relPath: '附件/观测.xlsx' })
+  const code = buildRealDataPreviewCode(data, {
+    sheetName: 'Sheet2',
+    xColumn: '时间',
+    yColumns: ['负荷', '温度']
+  })
+  assert.ok(code.includes('SHEET_NAME = "Sheet2"'))
+  assert.ok(code.includes('X_COLUMN = "时间"'))
+  assert.ok(code.includes('Y_COLUMNS = ["负荷","温度"]'))
 })
 
 check('Excel 与 TSV 使用对应读取器，非表格附件不生成代码', () => {
   const excel = buildRealDataPreviewCode(file({ kind: 'data', name: '结果.xlsx', relPath: '附件/结果.xlsx' }))
   const tsv = buildRealDataPreviewCode(file({ kind: 'data', name: '结果.tsv', relPath: '附件/结果.tsv' }))
-  assert.ok(excel.includes('pd.read_excel(DATA_FILE)'))
+  assert.ok(excel.includes('pd.read_excel(DATA_FILE, sheet_name=SHEET_NAME)'))
   assert.ok(tsv.includes("sep='\\t'"))
   assert.equal(buildRealDataPreviewCode(file({ kind: 'data', name: '压缩包.zip', relPath: '附件/压缩包.zip' })), null)
 })

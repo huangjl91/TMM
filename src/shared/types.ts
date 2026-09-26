@@ -14,6 +14,7 @@ export const IPC = {
   /** 导入赛题与附件：选文件 + 提取 + 落会话工作区，一次完成 */
   SessionIntake: 'session:intake',
   SessionFiles: 'session:files',
+  SessionDataInspect: 'session:data:inspect',
   /** 逐问轴：读清单与当前聚焦，切聚焦 */
   SessionQuestions: 'session:questions',
   SessionQuestionSet: 'session:question:set',
@@ -215,6 +216,12 @@ export interface GuidedSyncPayload {
 export interface GuidedReanalyzePayload {
   sessionId: number
   questionIdx: number
+}
+
+export interface DataInspectPayload {
+  sessionId: number
+  relPath: string
+  sheetName?: string | null
 }
 
 export interface GuidedCategoryPayload {

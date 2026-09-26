@@ -27,30 +27,53 @@ export interface IntakeResult {
   problemWarning: string | null
 }
 
+export interface DataFileProfile {
+  relPath: string
+  sheets: string[]
+  activeSheet: string | null
+  columns: string[]
+  numericColumns: string[]
+  rowCount: number
+}
+
+export interface DataPreviewSelection {
+  sheetName?: string | null
+  xColumn?: string | null
+  yColumns?: string[]
+}
+
 export function isReadableTabularFile(file: Pick<SessionFileView, 'kind' | 'relPath' | 'name'>): boolean {
   return file.kind === 'data' && Boolean(file.relPath) && /\.(csv|tsv|xlsx|xls)$/i.test(file.name)
 }
 
 /** 生成只读取已导入附件的基础探索代码；不写入示例数组，也不预设任何结果。 */
 export function buildRealDataPreviewCode(
-  file: Pick<SessionFileView, 'kind' | 'relPath' | 'name'>
+  file: Pick<SessionFileView, 'kind' | 'relPath' | 'name'>,
+  selection: DataPreviewSelection = {}
 ): string | null {
   if (!isReadableTabularFile(file)) return null
   const pathLiteral = JSON.stringify(file.relPath.replace(/\\/g, '/'))
   const isExcel = /\.xlsx?$/i.test(file.name)
   const isTsv = /\.tsv$/i.test(file.name)
+  const sheetLiteral = JSON.stringify(selection.sheetName ?? 0)
+  const xLiteral = selection.xColumn ? JSON.stringify(selection.xColumn) : 'None'
+  const yLiteral = JSON.stringify(selection.yColumns ?? [])
   const reader = isExcel
-    ? `pd.read_excel(DATA_FILE)`
+    ? `pd.read_excel(DATA_FILE, sheet_name=SHEET_NAME)`
     : `pd.read_csv(DATA_FILE${isTsv ? ", sep='\\t'" : ''})`
   return `# 此代码只读取已导入的真实附件，不创建模拟数据
 from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
+import json
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
 DATA_FILE = Path(${pathLiteral})
+SHEET_NAME = ${sheetLiteral}
+X_COLUMN = ${xLiteral}
+Y_COLUMNS = ${yLiteral}
 if not DATA_FILE.exists():
     raise FileNotFoundError(f'找不到已导入附件: {DATA_FILE}')
 
@@ -67,14 +90,29 @@ print('数据形状:', df.shape)
 print('字段:', list(df.columns))
 print(numeric.describe().to_string())
 
-cols = list(numeric.columns[:4])
-ax = numeric[cols].plot(figsize=(10, 5), linewidth=1.5)
-ax.set_xlabel('样本序号（请按题意替换为真实横轴字段）')
+cols = [c for c in Y_COLUMNS if c in numeric.columns] or list(numeric.columns[:4])
+if not cols:
+    raise ValueError('所选纵轴字段不是数值列')
+if X_COLUMN and X_COLUMN not in df.columns:
+    raise ValueError(f'找不到横轴字段: {X_COLUMN}')
+plot_data = df.set_index(X_COLUMN)[cols] if X_COLUMN else numeric[cols]
+ax = plot_data.plot(figsize=(10, 5), linewidth=1.5)
+ax.set_xlabel(X_COLUMN or '样本序号（请按题意选择真实横轴字段）')
 ax.set_ylabel('观测值（请补充物理量纲）')
 ax.set_title(f'真实附件基础检查：{DATA_FILE.name}')
 ax.grid(True, linestyle='--', alpha=0.35)
 plt.tight_layout()
 plt.savefig('real_data_preview.png', dpi=300)
+manifest = {
+    'sourceFile': DATA_FILE.as_posix(),
+    'sheet': SHEET_NAME if DATA_FILE.suffix.lower() in ('.xlsx', '.xls') else None,
+    'rowCount': int(len(df)),
+    'columns': list(map(str, df.columns)),
+    'xColumn': X_COLUMN,
+    'yColumns': list(map(str, cols)),
+    'output': 'real_data_preview.png'
+}
+Path('evidence_manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
 print('已生成 real_data_preview.png；请根据题意选择横轴、单位和模型输出后再形成结论。')
 `
 }

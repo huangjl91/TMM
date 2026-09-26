@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
-import { workspaceDir } from './sandbox'
+import { runCode, workspaceDir } from './sandbox'
 import { addSessionFile, createSession, listSessionFiles, loadSettings, logAiUsage, renameSession, saveStageOutputs } from './repo'
 import { parseQuestions } from '../shared/questions'
 import {
@@ -14,6 +14,7 @@ import {
   needsVerify,
   safeName,
   type IntakeKind,
+  type DataFileProfile,
   type SessionFileView
 } from '../shared/intake'
 import type { IntakeResult } from '../shared/intake'
@@ -280,6 +281,40 @@ export async function intake(): Promise<IntakeResult | null> {
 
 export function filesOf(sessionId: number): SessionFileView[] {
   return listSessionFiles(sessionId)
+}
+
+export async function inspectDataFile(
+  sessionId: number,
+  relPath: string,
+  sheetName?: string | null
+): Promise<DataFileProfile> {
+  const file = listSessionFiles(sessionId).find(
+    (item) => item.kind === 'data' && item.relPath === relPath && /\.(csv|tsv|xlsx|xls)$/i.test(item.name)
+  )
+  if (!file) throw new Error('没有找到可检查的数据附件')
+  const pathLiteral = JSON.stringify(file.relPath.replace(/\\/g, '/'))
+  const sheetLiteral = JSON.stringify(sheetName ?? 0)
+  const isExcel = /\.xlsx?$/i.test(file.name)
+  const isTsv = /\.tsv$/i.test(file.name)
+  const code = `import json
+from pathlib import Path
+import pandas as pd
+p = Path(${pathLiteral})
+if not p.exists(): raise FileNotFoundError(str(p))
+${isExcel ? `book = pd.ExcelFile(p)\nsheets = list(map(str, book.sheet_names))\nsheet = ${sheetLiteral}\nactive_sheet = sheets[sheet] if isinstance(sheet, int) else str(sheet)\ndf = pd.read_excel(p, sheet_name=active_sheet)` : `sheets = []\nactive_sheet = None\ndf = pd.read_csv(p${isTsv ? ", sep='\\t'" : ''})`}
+out = {
+  'relPath': p.as_posix(), 'sheets': sheets,
+  'activeSheet': active_sheet,
+  'columns': list(map(str, df.columns)),
+  'numericColumns': list(map(str, df.select_dtypes(include='number').columns)),
+  'rowCount': int(len(df))
+}
+print('DATA_PROFILE=' + json.dumps(out))`
+  const attempt = await runCode(sessionId, code)
+  if (!attempt.outcome.ok) throw new Error(attempt.outcome.error?.message ?? '数据附件检查失败')
+  const line = attempt.outcome.stdout.split(/\r?\n/).find((item) => item.startsWith('DATA_PROFILE='))
+  if (!line) throw new Error('没有获得数据字段信息')
+  return JSON.parse(line.slice('DATA_PROFILE='.length)) as DataFileProfile
 }
 
 export function readProblemPdf(sessionId: number): import('../shared/types').ProblemFileContent | null {

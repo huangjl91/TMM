@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { ArtifactContent, RunPayload, RunRecord } from '../shared/sandbox'
-import type { IntakeResult, SessionFileView } from '../shared/intake'
+import type { DataFileProfile, IntakeResult, SessionFileView } from '../shared/intake'
 import type { QuestionFocus } from '../shared/questions'
 import type { AdoptPayload, StageCard, StageView, SubmissionPayload, UsageRow } from '../shared/agent'
 import type { CompileResult, PaperDraft } from '../shared/latex'
@@ -40,6 +40,8 @@ const api = {
   getSession: (id: number): Promise<StoredMessage[]> => ipcRenderer.invoke(IPC.SessionGet, id),
   intake: (): Promise<IntakeResult | null> => ipcRenderer.invoke(IPC.SessionIntake),
   listFiles: (sessionId: number): Promise<SessionFileView[]> => ipcRenderer.invoke(IPC.SessionFiles, sessionId),
+  inspectDataFile: (sessionId: number, relPath: string, sheetName?: string | null): Promise<DataFileProfile> =>
+    ipcRenderer.invoke(IPC.SessionDataInspect, { sessionId, relPath, sheetName }),
   problemPdf: (sessionId: number): Promise<ProblemFileContent | null> =>
     ipcRenderer.invoke(IPC.SessionProblemPdf, sessionId),
   openProblemPdf: (sessionId: number): Promise<void> =>
