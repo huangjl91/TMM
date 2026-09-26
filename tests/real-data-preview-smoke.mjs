@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { buildRealDataPreviewCode } from '../.tmp/intake.mjs'
 
@@ -25,6 +25,10 @@ function run(name, relPath, createCode) {
   assert.ok(stdout.trim().length > 0)
   assert.ok(existsSync(join(root, 'real_data_preview.png')))
   assert.ok(existsSync(join(root, 'evidence_manifest.json')))
+  const manifest = JSON.parse(readFileSync(join(root, 'evidence_manifest.json'), 'utf8'))
+  assert.equal(manifest.sourceSha256.length, 64)
+  assert.equal(manifest.outputSha256.length, 64)
+  assert.ok(manifest.generatedAt)
   rmSync(join(root, 'real_data_preview.png'), { force: true })
   rmSync(join(root, 'evidence_manifest.json'), { force: true })
   console.log(`PASS  ${name} 真实读取并生成图表`)

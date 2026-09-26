@@ -66,6 +66,9 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 import json
+import hashlib
+import re
+from datetime import datetime, timezone
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
@@ -95,25 +98,92 @@ if not cols:
     raise ValueError('所选纵轴字段不是数值列')
 if X_COLUMN and X_COLUMN not in df.columns:
     raise ValueError(f'找不到横轴字段: {X_COLUMN}')
-plot_data = df.set_index(X_COLUMN)[cols] if X_COLUMN else numeric[cols]
-ax = plot_data.plot(figsize=(10, 5), linewidth=1.5)
-ax.set_xlabel(X_COLUMN or '样本序号（请按题意选择真实横轴字段）')
-ax.set_ylabel('观测值（请补充物理量纲）')
-ax.set_title(f'真实附件基础检查：{DATA_FILE.name}')
-ax.grid(True, linestyle='--', alpha=0.35)
+
+def label_and_unit(column):
+    text = str(column)
+    match = re.match(r'^(.*?)[_（(]([^_（）()]+)[）)]?$', text)
+    if not match:
+        return text, '未标注单位'
+    label, unit = match.group(1), match.group(2)
+    unit = {'C': '℃', 'degC': '℃'}.get(unit, unit)
+    return label, unit
+
+series_meta = {column: label_and_unit(column) for column in cols}
+units = {unit for _, unit in series_meta.values()}
+x_values = df[X_COLUMN] if X_COLUMN else df.index
+if len(units) == 1:
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for column in cols:
+        label, _unit = series_meta[column]
+        ax.plot(x_values, df[column], linewidth=1.5, label=label)
+    only_unit = next(iter(units))
+    ax.set_ylabel(f'观测值（{only_unit}）')
+    ax.legend()
+    axes = [ax]
+else:
+    fig, axes = plt.subplots(len(cols), 1, figsize=(10, max(4, 3.2 * len(cols))), sharex=True)
+    if len(cols) == 1:
+        axes = [axes]
+    for ax, column in zip(axes, cols):
+        label, unit = series_meta[column]
+        ax.plot(x_values, df[column], linewidth=1.6, label=label)
+        ax.set_ylabel(f'{label}（{unit}）')
+        ax.legend(loc='best')
+for ax in axes:
+    ax.grid(True, linestyle='--', alpha=0.35)
+axes[-1].set_xlabel(X_COLUMN or '样本序号')
+axes[0].set_title(f'真实附件基础检查：{DATA_FILE.name}')
 plt.tight_layout()
 plt.savefig('real_data_preview.png', dpi=300)
+
+missing_by_column = {str(key): int(value) for key, value in df.isna().sum().items() if int(value) > 0}
+duplicate_x = int(df.duplicated(subset=[X_COLUMN]).sum()) if X_COLUMN else None
+x_sorted = None
+invalid_time_values = None
+time_interval_regular = None
+inferred_frequency = None
+if X_COLUMN:
+    parsed_time = pd.to_datetime(df[X_COLUMN], errors='coerce')
+    invalid_time_values = int(parsed_time.isna().sum())
+    if invalid_time_values == 0:
+        x_sorted = bool(parsed_time.is_monotonic_increasing)
+        intervals = parsed_time.diff().dropna()
+        inferred_frequency = pd.infer_freq(parsed_time) if len(parsed_time) >= 3 else None
+        time_interval_regular = bool(inferred_frequency) if len(parsed_time) >= 3 else (bool(intervals.nunique() <= 1) if len(intervals) else True)
+    else:
+        x_sorted = bool(df[X_COLUMN].is_monotonic_increasing)
+
+source_hash = hashlib.sha256(DATA_FILE.read_bytes()).hexdigest()
+output_hash = hashlib.sha256(Path('real_data_preview.png').read_bytes()).hexdigest()
+mapping = {'sheet': SHEET_NAME, 'xColumn': X_COLUMN, 'yColumns': list(map(str, cols))}
+mapping_hash = hashlib.sha256(json.dumps(mapping, ensure_ascii=False, sort_keys=True).encode('utf-8')).hexdigest()
 manifest = {
+    'schemaVersion': 'tmm-evidence-v1',
+    'generatedAt': datetime.now(timezone.utc).isoformat(),
     'sourceFile': DATA_FILE.as_posix(),
+    'sourceSha256': source_hash,
     'sheet': SHEET_NAME if DATA_FILE.suffix.lower() in ('.xlsx', '.xls') else None,
     'rowCount': int(len(df)),
     'columns': list(map(str, df.columns)),
     'xColumn': X_COLUMN,
     'yColumns': list(map(str, cols)),
-    'output': 'real_data_preview.png'
+    'series': [{'column': str(column), 'label': series_meta[column][0], 'unit': series_meta[column][1]} for column in cols],
+    'quality': {
+        'missingByColumn': missing_by_column,
+        'duplicateRows': int(df.duplicated().sum()),
+        'duplicateX': duplicate_x,
+        'xSortedAscending': x_sorted,
+        'invalidTimeValues': invalid_time_values,
+        'timeIntervalRegular': time_interval_regular,
+        'inferredFrequency': inferred_frequency
+    },
+    'mappingSha256': mapping_hash,
+    'output': 'real_data_preview.png',
+    'outputSha256': output_hash
 }
 Path('evidence_manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
-print('已生成 real_data_preview.png；请根据题意选择横轴、单位和模型输出后再形成结论。')
+print('数据质量:', json.dumps(manifest['quality'], ensure_ascii=False))
+print('已生成 real_data_preview.png 与 evidence_manifest.json；这只是数据检查，不是模型结论。')
 `
 }
 
