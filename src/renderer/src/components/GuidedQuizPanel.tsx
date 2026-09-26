@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { ChartBar, FileText, UploadSimple } from '@phosphor-icons/react'
 import {
   GUIDED_STEPS,
   buildDefaultGuidedQuestions,
@@ -407,7 +408,7 @@ export function GuidedQuizPanel({
               className="flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/15 px-3 py-1 text-xs font-medium text-sky-200 transition-all hover:bg-sky-500/25 disabled:opacity-40"
               title="选择题目 PDF/文档及数据附件，系统将自动切分问题并准备引导"
             >
-              <span>{intakeBusy ? '⏳' : '📥'}</span>
+              <UploadSimple size={15} weight="bold" />
               <span>{intakeBusy ? '正在解析赛题...' : '导入赛题与附件'}</span>
             </button>
           ) : null}
@@ -448,8 +449,8 @@ export function GuidedQuizPanel({
               }`}
               title={f.digest}
             >
-              <span className={f.kind === 'problem' ? 'text-sky-300' : 'text-emerald-400'}>
-                {f.kind === 'problem' ? '📄 题' : '📊 附'}
+              <span className={`flex items-center gap-1 ${f.kind === 'problem' ? 'text-sky-300' : 'text-emerald-400'}`}>
+                {f.kind === 'problem' ? <FileText size={14} /> : <ChartBar size={14} />}{f.kind === 'problem' ? '题' : '附'}
               </span>
               <span className="max-w-[140px] truncate">{f.name}</span>
               <span className="text-[10px] text-white/35">({humanSize(f.size)})</span>
@@ -460,21 +461,25 @@ export function GuidedQuizPanel({
 
       <div className="flex-1 space-y-4 p-5">
         {!state?.sourceReady ? (
-          <div className="mx-auto mt-10 max-w-2xl rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-8 text-center shadow-sm">
-            <div className="text-3xl">📥</div>
-            <h2 className="mt-3 text-base font-semibold text-white">先提供真实题目，再开始建模引导</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-white/60">
-              当前没有可追溯的题目文本。系统不会预填题型、候选模型、模拟指标或论文结论，以免把示例误当成真实分析。
-            </p>
-            {onIntake ? (
-              <button
-                onClick={onIntake}
-                disabled={intakeBusy}
-                className="mt-5 rounded-xl bg-sky-600 px-5 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-40"
-              >
-                {intakeBusy ? '正在解析赛题...' : '导入题目与数据附件'}
-              </button>
-            ) : null}
+          <div className="guided-start-card mx-auto mt-5 max-w-3xl rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-5">
+              <div className="flex items-start gap-3 text-left">
+                <span className="guided-start-icon"><UploadSimple size={22} weight="duotone" /></span>
+                <div>
+                  <h2 className="text-base font-semibold text-white">从真实赛题开始</h2>
+                  <p className="mt-1 max-w-xl text-xs leading-5 text-white/60">导入题面和数据附件，系统会按小问建立学习路径，并保留每一步的依据。</p>
+                </div>
+              </div>
+              {onIntake ? <button onClick={onIntake} disabled={intakeBusy} className="shrink-0 rounded-lg bg-sky-600 px-4 py-2 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-40">
+                {intakeBusy ? '正在解析…' : '选择题目与附件'}
+              </button> : null}
+            </div>
+            <div className="guided-start-steps">
+              <div><strong>1</strong><span><b>导入材料</b><small>PDF、Word、Excel 或 CSV</small></span></div>
+              <div><strong>2</strong><span><b>确认小问</b><small>逐问判断任务类型和数据</small></span></div>
+              <div><strong>3</strong><span><b>开始建模</b><small>一次完成一个关键判断</small></span></div>
+            </div>
+            <p className="guided-start-note">没有真实题目时，不生成模拟指标或论文结论。</p>
           </div>
         ) : (
         <>

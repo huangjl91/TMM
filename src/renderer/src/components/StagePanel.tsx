@@ -1,90 +1,54 @@
-import { useState, type ReactNode } from 'react'
-import { HINT_LEVELS } from '@shared/stages'
+import { type ReactNode } from 'react'
+import { Books, FolderOpen, Path } from '@phosphor-icons/react'
 import type { StageView } from '@shared/agent'
 
-interface Props {
-  stages: StageView[]
-  currentId: number
-  onOpen: (stageId: number) => void
+type NavKey = 'path' | 'workspace' | 'library'
+interface Props { stages: StageView[]; currentId: number; onOpen: (stageId: number) => void; activeNav?: NavKey; onNavigate?: (key: NavKey) => void }
+const groups = [
+  { label: '问题理解', range: '1–3', ids: [1, 2, 3] },
+  { label: '建模求解', range: '4–8', ids: [4, 5, 6, 7, 8] },
+  { label: '表达交付', range: '9–11', ids: [9, 10, 11] }
+]
+
+export function StagePanel({ stages, currentId, onOpen, activeNav = 'path', onNavigate }: Props): ReactNode {
+  return <aside className="tmm-rail" aria-label="主导航">
+    <div className="tmm-rail-brand">T</div>
+    <button onClick={() => onNavigate?.('path')} className={`tmm-rail-item ${activeNav === 'path' ? 'is-active' : ''}`} title="学习路径"><Path size={20} weight="duotone" /><small>路径</small></button>
+    <button onClick={() => onNavigate?.('workspace')} className={`tmm-rail-item ${activeNav === 'workspace' ? 'is-active' : ''}`} title="工作区"><FolderOpen size={20} weight="regular" /><small>工作区</small></button>
+    <button onClick={() => onNavigate?.('library')} className={`tmm-rail-item ${activeNav === 'library' ? 'is-active' : ''}`} title="资料与证据"><Books size={20} weight="regular" /><small>证据</small></button>
+    <div className="tmm-rail-spacer" />
+    <div className="tmm-rail-step">{currentId}<small>/ 11</small></div>
+    <ol className="tmm-stage-semantics" aria-label="完整建模阶段">
+      {stages.map((stage) => <li key={stage.id}>
+        <button onClick={() => onOpen(stage.id)} disabled={stage.locked}>
+          {stage.status === 'done' ? '✓' : stage.status === 'active' ? '▶' : '○'} {stage.id} {stage.title}
+          {stage.blocking ? ' 强制' : ''}
+        </button>
+      </li>)}
+    </ol>
+  </aside>
 }
 
-const STATUS_MARK: Record<StageView['status'], string> = {
-  todo: '○',
-  active: '▶',
-  submitted: '…',
-  done: '✓'
-}
-
-export function StagePanel({ stages, currentId, onOpen }: Props): ReactNode {
-  const [showRubric, setShowRubric] = useState(true)
-  const current = stages.find((s) => s.id === currentId)
-
-  return (
-    <aside className="flex w-72 shrink-0 flex-col border-r border-white/10 bg-[#12141a]">
-      <div className="border-b border-white/10 px-4 py-3 text-xs font-semibold tracking-wide text-white/50">
-        建模阶段
-      </div>
-      <ol className="flex-1 overflow-y-auto py-1">
-        {stages.map((s) => {
-          const isCurrent = s.id === currentId
-          return (
-            <li key={s.id}>
-              <button
-                onClick={() => onOpen(s.id)}
-                className={
-                  'w-full px-3 py-2 text-left text-sm hover:bg-white/5 ' +
-                  (isCurrent ? 'bg-sky-500/10 text-sky-200' : s.locked ? 'text-white/25' : 'text-white/65')
-                }
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-3 text-xs opacity-70">{s.locked ? '⊘' : STATUS_MARK[s.status]}</span>
-                  <span className="w-4 text-right text-xs opacity-50">{s.id}</span>
-                  <span className={s.status === 'done' ? 'line-through opacity-60' : ''}>{s.title}</span>
-                  {s.blocking ? (
-                    <span className="ml-auto rounded border border-amber-500/40 px-1 text-[10px] text-amber-300/80">
-                      强制
-                    </span>
-                  ) : null}
-                </div>
-                {isCurrent ? (
-                  <div className="mt-1 flex flex-wrap gap-1 pl-5 text-[10px]">
-                    <span className="rounded bg-white/10 px-1 text-white/60">L{ s.hintLevel } {HINT_LEVELS[s.hintLevel]}</span>
-                    {s.attempts > 0 ? <span className="rounded bg-white/10 px-1 text-white/60">未过 {s.attempts} 次</span> : null}
-                    {s.score !== null ? <span className="rounded bg-white/10 px-1 text-white/60">评分 {s.score}</span> : null}
-                  </div>
-                ) : null}
-              </button>
-            </li>
-          )
-        })}
-      </ol>
-      {current ? (
-        <div className="shrink-0 border-t border-white/10 text-[11px] leading-4">
-          <button
-            onClick={() => setShowRubric((v) => !v)}
-            className="flex w-full items-center gap-2 px-4 py-2 text-left text-white/50 hover:bg-white/5"
-          >
-            <span>{showRubric ? '▾' : '▸'}</span>
-            <span>本阶段评分点与失分项</span>
+export function JourneyProgress({ stages, currentId, onOpen }: Props): ReactNode {
+  const current = stages.find((stage) => stage.id === currentId)
+  const next = stages.find((stage) => stage.id === currentId + 1)
+  return <div className="tmm-journey">
+    <div className="tmm-journey-groups">{groups.map((group) =>
+      <section className="tmm-journey-group" key={group.label}>
+        <div className="tmm-journey-label"><strong>{group.label}</strong><span>{group.range}</span></div>
+        <div className="tmm-journey-dots">{group.ids.map((id) => {
+          const stage = stages.find((item) => item.id === id)
+          return <button key={id} onClick={() => onOpen(id)} disabled={stage?.locked} title={stage?.title}
+            className={id === currentId ? 'is-current' : stage?.status === 'done' ? 'is-done' : ''}>
+            {stage?.status === 'done' ? '✓' : id}
           </button>
-          {showRubric ? (
-            <div className="max-h-56 overflow-y-auto px-4 pb-3 pl-7 text-white/45">
-              <div className="mb-1 text-white/60">{current.output}</div>
-              <ul className="mb-2 list-disc space-y-0.5 pl-4">
-                {current.rubric.points.map((p) => (
-                  <li key={p}>{p}</li>
-                ))}
-              </ul>
-              <div className="mb-1 text-amber-300/70">常见失分</div>
-              <ul className="list-disc space-y-0.5 pl-4 text-amber-200/50">
-                {current.rubric.pitfalls.map((p) => (
-                  <li key={p}>{p}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </aside>
-  )
+        })}</div>
+      </section>
+    )}</div>
+    <div className="tmm-current-step">
+      <span>当前 <strong>{currentId} / 11</strong></span>
+      <span>本步 <strong>{current?.title ?? '准备开始'}</strong></span>
+      <span>下一步 <strong>{next?.title ?? '完成'}</strong></span>
+    </div>
+  </div>
 }

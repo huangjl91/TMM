@@ -5,7 +5,7 @@ import { CompliancePanel } from './components/CompliancePanel'
 import { FreeChatPanel, type FreeMsg } from './components/FreeChatPanel'
 import { PaperPanel } from './components/PaperPanel'
 import { SettingsModal } from './components/SettingsModal'
-import { StagePanel } from './components/StagePanel'
+import { JourneyProgress, StagePanel } from './components/StagePanel'
 import { TaskCard, type Injection } from './components/TaskCard'
 import { WorkspacePanel } from './components/WorkspacePanel'
 import { GuidedQuizPanel } from './components/GuidedQuizPanel'
@@ -66,6 +66,9 @@ export function App(): ReactNode {
   const [questions, setQuestions] = useState<QuestionView[]>([])
   const [focus, setFocus] = useState(NO_QUESTION)
   const [viewMode, setViewMode] = useState<'guided' | 'coach'>('guided')
+  const [coachOpen, setCoachOpen] = useState(true)
+  const [activeNav, setActiveNav] = useState<'path' | 'workspace' | 'library'>('path')
+  const [assistantTab, setAssistantTab] = useState<'coach' | 'evidence'>('coach')
 
   const sessionIdRef = useRef<number | null>(null)
   sessionIdRef.current = sessionId
@@ -566,60 +569,51 @@ export function App(): ReactNode {
   const hintLevel = currentStage?.hintLevel ?? 0
 
   return (
-    <div className="flex h-screen flex-col bg-[#0f1115] text-white/90">
-      <header className="flex shrink-0 items-center gap-3 border-b border-white/10 bg-[#12141a] px-4 py-2.5">
-        <img src="./icon.png" alt="" className="h-6 w-6 shrink-0 rounded" />
-        <span className="text-sm font-semibold">数学建模教练</span>
-        <span className="rounded-md border border-white/10 px-2 py-0.5 font-mono text-[11px] text-white/50">
-          {settings ? `${settings.providerId} · ${settings.model}` : '加载中'}
-        </span>
-        <span className="text-[11px] text-white/30">引导式 · 教练不代写</span>
-        <button
-          onClick={() => setShowSettings(true)}
-          className="ml-auto rounded-lg border border-white/15 px-3 py-1 text-xs text-white/70 hover:bg-white/5"
-        >
-          设置
-        </button>
+    <div className="tmm-light flex h-screen flex-col">
+      <header className="tmm-header">
+        <div className="tmm-wordmark"><img src="./icon.png" alt="" /><strong>TMM</strong><span>数学建模学习教练</span></div>
+        <div className="tmm-header-actions">
+          <span className="tmm-model-state">{settings ? `${settings.providerId} · ${settings.model}` : '加载中'}</span>
+          <span className="tmm-principle">引导思考 · 保留证据 · 不代写</span>
+          <button onClick={() => setShowSettings(true)}>设置</button>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <StagePanel stages={stages} currentId={stageId} onOpen={(id) => void onOpenStage(id)} />
+        <StagePanel
+          stages={stages}
+          currentId={stageId}
+          onOpen={(id) => void onOpenStage(id)}
+          activeNav={activeNav}
+          onNavigate={(key) => {
+            setActiveNav(key)
+            if (key === 'workspace') setViewMode('coach')
+            if (key === 'path') setViewMode('guided')
+            if (key === 'library') { setAssistantTab('evidence'); setCoachOpen(true) }
+          }}
+        />
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* 顶栏视图切换：引导式做题中心 vs 自由探究教练对话 */}
-          <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#12141a] px-4 py-1.5">
-            <div className="flex items-center gap-2">
+          <JourneyProgress stages={stages} currentId={stageId} onOpen={(id) => void onOpenStage(id)} />
+          <div className="tmm-viewbar">
+            <div className="tmm-viewtabs">
               <button
-                onClick={() => setViewMode('guided')}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
-                  viewMode === 'guided'
-                    ? 'bg-sky-600 text-white shadow-sm'
-                    : 'text-white/60 hover:bg-white/5 hover:text-white'
-                }`}
+                onClick={() => { setViewMode('guided'); setActiveNav('path') }}
+                className={viewMode === 'guided' ? 'is-active' : ''}
               >
-                <span>🎯</span>
-                <span>引导式做题（简单到难 · 问AI · 绘图与结论）</span>
+                学习路径
               </button>
               <button
-                onClick={() => setViewMode('coach')}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
-                  viewMode === 'coach'
-                    ? 'bg-sky-600 text-white shadow-sm'
-                    : 'text-white/60 hover:bg-white/5 hover:text-white'
-                }`}
+                onClick={() => { setViewMode('coach'); setActiveNav('workspace') }}
+                className={viewMode === 'coach' ? 'is-active' : ''}
               >
-                <span>💬</span>
-                <span>自由探究（伴跑教练对话与任务卡）</span>
+                自由探究
               </button>
             </div>
-            {viewMode === 'guided' ? (
-              <span className="text-[11px] text-white/40">
-                答完选择题自动生成数学模型与可视化方案
-              </span>
-            ) : null}
+            <span>{viewMode === 'guided' ? '一次只完成一个判断，需要时再展开依据' : '围绕当前阶段讨论并完成任务卡'}</span>
           </div>
-
+          <main className="tmm-main">
           {viewMode === 'guided' ? (
-            <div className="flex-1 overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-hidden">
               <GuidedQuizPanel
                 sessionId={sessionId}
                 questions={questions}
@@ -640,7 +634,7 @@ export function App(): ReactNode {
               />
             </div>
           ) : (
-            <>
+            <div className="tmm-coach-flow">
               <ChatPanel
                 messages={messages}
                 streaming={streaming}
@@ -680,12 +674,20 @@ export function App(): ReactNode {
               />
               <PaperPanel sessionId={sessionId} />
               <CompliancePanel sessionId={sessionId} stageId={stageId} />
-            </>
+            </div>
           )}
+          </main>
         </div>
-        {/* 右栏：上方是随时可用的 AI 对话框，下方工作区默认收起，不跟对话抢地方 */}
-        <aside className="flex w-[26rem] shrink-0 flex-col border-l border-white/10 bg-[#12141a]">
-          <FreeChatPanel
+        <aside className={`tmm-assistant ${coachOpen ? '' : 'is-collapsed'}`}>
+          <div className="tmm-assistant-head">
+            {coachOpen ? <div className="tmm-assistant-tabs">
+              <button onClick={() => setAssistantTab('coach')} className={assistantTab === 'coach' ? 'is-active' : ''}>AI 教练</button>
+              <button onClick={() => setAssistantTab('evidence')} className={assistantTab === 'evidence' ? 'is-active' : ''}>证据</button>
+            </div> : null}
+            <button onClick={() => setCoachOpen((value) => !value)} title={coachOpen ? '收起教练' : '展开教练'}>{coachOpen ? '»' : '«'}</button>
+          </div>
+          {coachOpen ? <>
+          {assistantTab === 'coach' ? <FreeChatPanel
             messages={freeMessages}
             streaming={freeStreaming}
             error={freeError}
@@ -695,8 +697,18 @@ export function App(): ReactNode {
             onSend={onSendFree}
             onAbort={onAbortFree}
             onOpenSettings={() => setShowSettings(true)}
-          />
-          <WorkspacePanel
+          /> : <div className="tmm-evidence-panel">
+            <div className="tmm-evidence-intro">
+              <strong>当前证据链</strong>
+              <span>所有结论都应能回到来源和运行结果。</span>
+            </div>
+            <div className="tmm-evidence-kinds">
+              <div><b>来源材料</b><span>{files.length > 0 ? `${files.length} 个附件` : '等待导入题面与数据'}</span></div>
+              <div><b>建模决策</b><span>{sessionId ? `正在记录第 ${stageId} 阶段` : '建立会话后开始记录'}</span></div>
+              <div><b>运行证据</b><span>代码、图表和指标将在运行后出现</span></div>
+            </div>
+            {files.length === 0 ? <button className="tmm-evidence-import" onClick={() => void onIntake()} disabled={intakeBusy}>{intakeBusy ? '正在解析…' : '导入题目与附件'}</button> : null}
+            <WorkspacePanel
             sessions={sessions}
             activeId={sessionId}
             stageId={stageId}
@@ -707,7 +719,8 @@ export function App(): ReactNode {
             onNew={newSession}
             onPin={(m, on) => void onPinMethod(m, on)}
             onExplain={onExplain}
-          />
+          /></div>}
+          </> : null}
         </aside>
       </div>
 
