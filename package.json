@@ -30,6 +30,7 @@
     "smoke:intake": "esbuild src/shared/intake.ts --bundle --format=esm --platform=node --outfile=.tmp/intake.mjs --log-level=warning && node tests/intake-smoke.mjs",
     "smoke:realdata": "esbuild src/shared/intake.ts --bundle --format=esm --platform=node --outfile=.tmp/intake.mjs --log-level=warning && node tests/real-data-preview-smoke.mjs",
     "smoke:evidence-flow": "esbuild src/shared/intake.ts --bundle --format=esm --platform=node --outfile=.tmp/intake.mjs --log-level=warning && esbuild src/shared/guidedQuiz.ts --bundle --format=esm --platform=node --outfile=.tmp/guidedQuiz.mjs --log-level=warning && node tests/guided-evidence-flow-smoke.mjs",
+    "smoke:prediction": "esbuild src/shared/prediction.ts --bundle --format=esm --platform=node --outfile=.tmp/prediction.mjs --log-level=warning && node tests/prediction-baseline-smoke.mjs",
     "smoke:questions": "esbuild src/shared/questions.ts --bundle --format=esm --platform=node --outfile=.tmp/questions.mjs --log-level=warning && node tests/questions-smoke.mjs",
     "smoke:ui:questions": "node tests/ui-probe.mjs questions",
     "smoke:ui:quiz": "node tests/ui-probe.mjs quiz",
