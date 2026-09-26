@@ -74,19 +74,51 @@ train_count = len(work) - test_count
 if train_count < 2:
     raise ValueError('训练段不足 2 行，无法建立上一期观测基线')
 
-# walk-forward naive：测试期每一点只使用它前一期已经观测到的真实值。
+# 三个可解释基线共用同一个按时间留出的测试集。
 actual = work['_target'].iloc[train_count:].to_numpy(dtype=float)
-predicted = work['_target'].shift(1).iloc[train_count:].to_numpy(dtype=float)
-errors = actual - predicted
-mae = float(np.mean(np.abs(errors)))
-rmse = float(np.sqrt(np.mean(errors ** 2)))
+naive_pred = work['_target'].shift(1).iloc[train_count:].to_numpy(dtype=float)
+
+# 线性趋势只在训练段拟合，再一次性外推测试段，不接触测试目标值。
+train_x = np.arange(train_count, dtype=float)
+test_x = np.arange(train_count, len(work), dtype=float)
+trend_slope, trend_intercept = np.polyfit(train_x, work['_target'].iloc[:train_count].to_numpy(dtype=float), 1)
+trend_pred = trend_intercept + trend_slope * test_x
+
+# 3 期移动平均采用滚动预测；每个测试点只使用当时已经观测到的历史值。
+history = work['_target'].iloc[:train_count].to_list()
+moving_pred = []
+for observed in actual:
+    moving_pred.append(float(np.mean(history[-3:])))
+    history.append(float(observed))
+moving_pred = np.asarray(moving_pred, dtype=float)
+
 nonzero = actual != 0
-mape = float(np.mean(np.abs(errors[nonzero] / actual[nonzero])) * 100) if bool(nonzero.any()) else None
+def metric_set(prediction):
+    errors = actual - prediction
+    return {
+        'MAE': float(np.mean(np.abs(errors))),
+        'RMSE': float(np.sqrt(np.mean(errors ** 2))),
+        'MAPE_percent': float(np.mean(np.abs(errors[nonzero] / actual[nonzero])) * 100) if bool(nonzero.any()) else None,
+        'MAPE_nonzeroSamples': int(nonzero.sum())
+    }
+
+predictions = {
+    'walk-forward-naive-lag-1': naive_pred,
+    'linear-trend': trend_pred,
+    'walk-forward-moving-average-3': moving_pred
+}
+metrics = {name: metric_set(values) for name, values in predictions.items()}
+best_model = min(metrics, key=lambda name: metrics[name]['RMSE'])
+best_pred = predictions[best_model]
+errors = actual - best_pred
 
 result = pd.DataFrame({
     'time': work['_time'].iloc[train_count:].dt.strftime('%Y-%m-%dT%H:%M:%S').to_numpy(),
     'actual': actual,
-    'predicted': predicted,
+    'naive_lag_1': naive_pred,
+    'linear_trend': trend_pred,
+    'moving_average_3': moving_pred,
+    'best_model_prediction': best_pred,
     'residual': errors
 })
 result.to_csv('prediction_baseline_results.csv', index=False, encoding='utf-8-sig')
@@ -94,14 +126,16 @@ result.to_csv('prediction_baseline_results.csv', index=False, encoding='utf-8-si
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=False)
 test_time = work['_time'].iloc[train_count:]
 ax1.plot(test_time, actual, marker='o', linewidth=1.7, label='测试集真实值')
-ax1.plot(test_time, predicted, marker='s', linestyle='--', linewidth=1.5, label='上一期观测基线')
-ax1.set_title(f'预测基线验证：{TARGET_COLUMN}')
+ax1.plot(test_time, naive_pred, marker='s', linestyle='--', linewidth=1.3, label='上一期观测')
+ax1.plot(test_time, trend_pred, marker='^', linestyle='--', linewidth=1.3, label='线性趋势')
+ax1.plot(test_time, moving_pred, marker='d', linestyle='--', linewidth=1.3, label='3期移动平均')
+ax1.set_title(f'预测模型同测试集比较：{TARGET_COLUMN}')
 ax1.set_ylabel(TARGET_COLUMN)
 ax1.grid(True, linestyle='--', alpha=0.35)
 ax1.legend()
 ax2.axhline(0, color='#555555', linewidth=1)
 ax2.bar(test_time, errors, width=15 if len(test_time) > 1 else 1, color='#4c78a8')
-ax2.set_title('测试集残差（真实值 - 预测值）')
+ax2.set_title(f'最佳模型残差（真实值 - 预测值）：{best_model}')
 ax2.set_xlabel(TIME_COLUMN)
 ax2.set_ylabel('残差')
 ax2.grid(True, axis='y', linestyle='--', alpha=0.35)
@@ -122,16 +156,30 @@ configuration = {
 manifest = {
     'schemaVersion': 'tmm-model-evidence-v1',
     'generatedAt': datetime.now(timezone.utc).isoformat(),
-    'purpose': '教学用预测基线与评估流程检查，不代表最终模型',
+    'purpose': '教学用预测基线比较与评估流程检查，不代表最终模型',
     'sourceFile': DATA_FILE.as_posix(),
     'sourceSha256': source_hash,
     'configuration': configuration,
     'configurationSha256': hashlib.sha256(json.dumps(configuration, ensure_ascii=False, sort_keys=True).encode('utf-8')).hexdigest(),
-    'algorithm': {
-        'id': 'walk-forward-naive-lag-1',
-        'description': '测试期每一点使用前一期已经观测到的真实值作为预测',
-        'usesFutureInformation': False
-    },
+    'algorithms': [
+        {
+            'id': 'walk-forward-naive-lag-1',
+            'description': '测试期每一点使用前一期已经观测到的真实值作为预测',
+            'usesFutureInformation': False
+        },
+        {
+            'id': 'linear-trend',
+            'description': '只用训练段拟合线性趋势，并外推整个测试段',
+            'usesFutureInformation': False,
+            'parameters': {'slope': float(trend_slope), 'intercept': float(trend_intercept)}
+        },
+        {
+            'id': 'walk-forward-moving-average-3',
+            'description': '使用预测时点之前最近 3 个已观测值的均值',
+            'usesFutureInformation': False,
+            'parameters': {'window': 3}
+        }
+    ],
     'split': {
         'strategy': 'chronological-holdout',
         'trainRows': int(train_count),
@@ -141,12 +189,12 @@ manifest = {
         'testStart': work['_time'].iloc[train_count].isoformat(),
         'testEnd': work['_time'].iloc[-1].isoformat()
     },
-    'metrics': {
-        'MAE': mae,
-        'RMSE': rmse,
-        'MAPE_percent': mape,
-        'MAPE_nonzeroSamples': int(nonzero.sum())
+    'selection': {
+        'metric': 'RMSE',
+        'bestModel': best_model,
+        'scope': 'same chronological holdout test set'
     },
+    'metricsByModel': metrics,
     'outputs': [
         {'path': 'prediction_baseline_results.csv', 'sha256': result_hash},
         {'path': 'prediction_baseline.png', 'sha256': plot_hash}
@@ -155,7 +203,10 @@ manifest = {
 Path('model_evidence.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
 
 print(f'时间切分: 训练 {train_count} 行，测试 {test_count} 行')
-print(f'MAE={mae:.6g}, RMSE={rmse:.6g}, MAPE={mape if mape is not None else "不适用"}')
+print('同一测试集模型比较:')
+for name, values in metrics.items():
+    print(f"  {name}: MAE={values['MAE']:.6g}, RMSE={values['RMSE']:.6g}, MAPE={values['MAPE_percent'] if values['MAPE_percent'] is not None else '不适用'}")
+print(f'当前测试集最佳模型（按 RMSE）: {best_model}')
 print('已生成 prediction_baseline_results.csv、prediction_baseline.png 与 model_evidence.json')
 print('这是比较后续模型的最低基线，不是论文结论。')
 `

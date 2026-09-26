@@ -36,15 +36,23 @@ for (const name of ['prediction_baseline_results.csv', 'prediction_baseline.png'
 }
 const manifest = JSON.parse(readFileSync(join(root, 'model_evidence.json'), 'utf8'))
 assert.equal(manifest.schemaVersion, 'tmm-model-evidence-v1')
-assert.equal(manifest.algorithm.id, 'walk-forward-naive-lag-1')
-assert.equal(manifest.algorithm.usesFutureInformation, false)
+assert.deepEqual(manifest.algorithms.map((item) => item.id), [
+  'walk-forward-naive-lag-1',
+  'linear-trend',
+  'walk-forward-moving-average-3'
+])
+assert.ok(manifest.algorithms.every((item) => item.usesFutureInformation === false))
 assert.equal(manifest.split.trainRows, 24)
 assert.equal(manifest.split.testRows, 6)
-assert.ok(manifest.metrics.MAE > 0)
-assert.ok(manifest.metrics.RMSE >= manifest.metrics.MAE)
+assert.equal(manifest.selection.metric, 'RMSE')
+assert.ok(manifest.metricsByModel[manifest.selection.bestModel])
+for (const metrics of Object.values(manifest.metricsByModel)) {
+  assert.ok(metrics.MAE >= 0)
+  assert.ok(metrics.RMSE >= metrics.MAE)
+}
 assert.equal(manifest.outputs.length, 2)
 assert.ok(manifest.outputs.every((item) => item.sha256.length === 64))
 assert.equal(manifest.sourceSha256.length, 64)
 assert.equal(manifest.configurationSha256.length, 64)
 
-console.log('PASS  时间切分 → 上一期观测基线 → 指标 → 预测图 → 模型证据清单')
+console.log('PASS  时间切分 → 三模型同集比较 → 指标选优 → 预测图 → 模型证据清单')
