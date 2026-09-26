@@ -1,0 +1,36 @@
+name: 功能建议
+description: 提议一个可独立验收的改进
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 用户遇到的问题
+      description: 描述谁在什么情况下无法完成什么任务。
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 期望行为
+      description: 用具体操作和结果描述，不只写技术方案。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收条件
+      placeholder: "- [ ] 当……时……\n- [ ] 不会……"
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: 预计范围
+      options:
+        - 小改动（单一文件或测试）
+        - 中等改动（一个完整流程）
+        - 大改动（跨模块，需要先讨论）
+    validations:
+      required: true

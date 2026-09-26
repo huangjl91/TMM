@@ -3,6 +3,8 @@ import {
   GUIDED_STEPS,
   detectProblemCategory,
   explainProblemCategory,
+  redactUnsupportedResultClaims,
+  validateGuidedAnalysisPayload,
   extractProblemElements,
   buildDefaultGuidedQuestions,
   synthesizeGuidedDraft
@@ -26,6 +28,13 @@ const vague = buildDefaultGuidedQuestions(1, '输入附件一，输出计算结�
 assert.equal(vague.knowledge.category, 'prediction')
 assert.ok(vague.candidateModels.some((model) => /ARIMA|Prophet|预测/.test(model.name + model.aka)))
 console.log('PASS  题型判断可解释，并允许学生覆盖后重建候选模型')
+
+assert.equal(
+  redactUnsupportedResultClaims('MAPE 为 3.42%，准确率达到 98%，成本下降 20%'),
+  'MAPE 为 【待计算】，准确率达到 【待计算】，成本下降 【待计算】'
+)
+assert.equal(validateGuidedAnalysisPayload({ elements: {}, knowledge: {}, questions: {} }), null)
+console.log('PASS  无运行证据的结果指标会被占位，残缺在线模型结构不会进入缓存')
 
 // 2. 4 阶梯结构与梯度由浅入深校验
 const { knowledge, questions, candidateModels } = buildDefaultGuidedQuestions(1, '建立最优化调度模型使得总成本最小')

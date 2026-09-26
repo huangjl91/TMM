@@ -19,6 +19,7 @@ import {
   buildDefaultGuidedQuestions,
   enforceEvidenceSafeQuestions,
   explainProblemCategory,
+  validateGuidedAnalysisPayload,
   extractProblemElements,
   synthesizeGuidedDraft,
   type CandidateModelInfo,
@@ -355,15 +356,16 @@ export async function handleGuidedReanalyze(
 
       const jsonText = sliceJsonObject(raw)
       if (jsonText) {
-        const parsed = JSON.parse(jsonText)
-        if (parsed.elements && parsed.knowledge && parsed.questions) {
-          parsed.elements._sourceFingerprint = sourceFingerprint
+        const parsed = validateGuidedAnalysisPayload(JSON.parse(jsonText))
+        if (parsed) {
+          const parsedElements = parsed.elements as ProblemElements & AnalysisMetadata
+          parsedElements._sourceFingerprint = sourceFingerprint
           const previous = getGuidedAnalysis(sessionId, questionIdx)
           if (previous) {
             try {
               const previousElements = JSON.parse(previous.elementsJson) as AnalysisMetadata
               if (previousElements._categoryOverride) {
-                parsed.elements._categoryOverride = previousElements._categoryOverride
+                parsedElements._categoryOverride = previousElements._categoryOverride
               }
             } catch {
               // 旧缓存损坏时忽略元数据，后续仍可用本地规则重建。
@@ -378,8 +380,8 @@ export async function handleGuidedReanalyze(
             sessionId,
             questionIdx,
             JSON.stringify(parsed.knowledge),
-            JSON.stringify(enforceEvidenceSafeQuestions(parsed.questions)),
-            JSON.stringify(parsed.elements)
+            JSON.stringify(parsed.questions),
+            JSON.stringify(parsedElements)
           )
           logAiUsage(
             sessionId,

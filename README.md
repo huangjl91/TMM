@@ -126,6 +126,8 @@ tests/           离线冒烟 + CDP 端到端探针
 
 ## 提交前自检
 
+准备认领任务或提交 PR 时，请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。仓库提供了缺陷、功能建议和 Pull Request 模板，用于减少多人重复开发。
+
 ```bash
 npm run typecheck && npm run build && npm run smoke:agent && npm run smoke:compliance
 ```

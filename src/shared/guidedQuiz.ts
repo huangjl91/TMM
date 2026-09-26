@@ -153,13 +153,82 @@ export interface GuidedSessionState {
 export const REAL_DATA_CODE_PLACEHOLDER = `# 请先导入 CSV/TSV/XLSX 数据附件。
 # 系统随后会生成显式读取“附件/文件名”的基础检查代码；不会创建随机数或示例数组。`
 
+const RESULT_METRIC_PATTERNS = [
+  /((?:MAPE|RMSE|MAE|R\^?2|决定系数|准确率|召回率|F1|p\s*值|p-value|置信区间)\s*(?:为|=|达到|约为)?\s*)-?\d+(?:\.\d+)?\s*%?/gi,
+  /((?:降低|下降|提升|提高|减少|节省|增长|改善)\s*(?:了|约|达到)?\s*)\d+(?:\.\d+)?\s*%/g
+]
+
+export function redactUnsupportedResultClaims(text: string): string {
+  return RESULT_METRIC_PATTERNS.reduce(
+    (current, pattern) => current.replace(pattern, (_match, prefix: string) => `${prefix}【待计算】`),
+    text
+  )
+}
+
 /** 历史缓存和在线模型输出都经过这里，避免把演示数组当作学生的真实结果运行。 */
 export function enforceEvidenceSafeQuestions(
   questions: Record<GuidedStep, GuidedQuestion>
 ): Record<GuidedStep, GuidedQuestion> {
   const visualization = questions.visualization?.visualization
-  if (visualization) visualization.pythonCode = REAL_DATA_CODE_PLACEHOLDER
+  if (visualization) {
+    visualization.pythonCode = REAL_DATA_CODE_PLACEHOLDER
+    visualization.expectedFinding = redactUnsupportedResultClaims(visualization.expectedFinding)
+    visualization.paperConclusion = redactUnsupportedResultClaims(visualization.paperConclusion)
+  }
+  for (const question of Object.values(questions)) {
+    question.aiAdvice.reason = redactUnsupportedResultClaims(question.aiAdvice.reason)
+    question.aiAdvice.mathNote = question.aiAdvice.mathNote
+      ? redactUnsupportedResultClaims(question.aiAdvice.mathNote)
+      : undefined
+    question.aiAdvice.pitfalls = Object.fromEntries(
+      Object.entries(question.aiAdvice.pitfalls).map(([key, value]) => [key, redactUnsupportedResultClaims(value)])
+    )
+  }
   return questions
+}
+
+export interface GuidedAnalysisPayload {
+  elements: ProblemElements
+  knowledge: ProblemKnowledge
+  questions: Record<GuidedStep, GuidedQuestion>
+}
+
+/** 在线模型结果的最小可信结构；不完整输出直接回退本地规则，不写入缓存。 */
+export function validateGuidedAnalysisPayload(value: unknown): GuidedAnalysisPayload | null {
+  if (!value || typeof value !== 'object') return null
+  const root = value as Record<string, unknown>
+  const elements = root.elements as Partial<ProblemElements> | undefined
+  const knowledge = root.knowledge as Partial<ProblemKnowledge> | undefined
+  const questions = root.questions as Partial<Record<GuidedStep, GuidedQuestion>> | undefined
+  if (!elements || !knowledge || !questions) return null
+  if (typeof elements.coreTarget !== 'string' || !elements.coreTarget.trim()) return null
+  if (![elements.inputData, elements.physicsConstraints, elements.deliverables].every(Array.isArray)) return null
+  const categories: ProblemKnowledge['category'][] = [
+    'prediction', 'optimization', 'evaluation', 'differential', 'machine_learning', 'network'
+  ]
+  if (!categories.includes(knowledge.category as ProblemKnowledge['category'])) return null
+  if (
+    typeof knowledge.topic !== 'string' ||
+    typeof knowledge.summary !== 'string' ||
+    typeof knowledge.mathEssence !== 'string' ||
+    !Array.isArray(knowledge.keyPrinciples) ||
+    !Array.isArray(knowledge.commonPitfalls)
+  ) return null
+  for (const step of ['intuition', 'model_select', 'formulation', 'visualization'] as GuidedStep[]) {
+    const question = questions[step]
+    if (!question || question.step !== step || typeof question.ask !== 'string') return null
+    if (!Array.isArray(question.options) || question.options.length < 2) return null
+    const keys = question.options.map((option) => option?.key)
+    if (keys.some((key) => typeof key !== 'string') || new Set(keys).size !== keys.length) return null
+    if (!question.aiAdvice || !keys.includes(question.aiAdvice.recommended)) return null
+    if (typeof question.aiAdvice.reason !== 'string' || typeof question.aiAdvice.pitfalls !== 'object') return null
+  }
+  if (!questions.visualization?.visualization) return null
+  return {
+    elements: elements as ProblemElements,
+    knowledge: knowledge as ProblemKnowledge,
+    questions: enforceEvidenceSafeQuestions(questions as Record<GuidedStep, GuidedQuestion>)
+  }
 }
 
 /** 从题干与全文中抽取关键要素（核心目标、输入数据、硬性物理约束、规定交付物） */
