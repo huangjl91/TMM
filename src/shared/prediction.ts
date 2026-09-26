@@ -18,6 +18,76 @@ export interface PredictionEvidenceSummary {
   intervals: Array<{ level: number; halfWidth: number; coverage: number }>
 }
 
+export interface PredictionInterpretation {
+  status: 'acceptable' | 'caution' | 'adjust'
+  label: string
+  reasons: string[]
+  nextActions: string[]
+  reflectionQuestions: string[]
+}
+
+/** 用可核对规则解释结果，不用固定误差阈值替不同量纲的数据武断判优。 */
+export function interpretPredictionEvidence(summary: PredictionEvidenceSummary): PredictionInterpretation {
+  const selected = summary.metrics.find((item) => item.model === summary.bestModel)
+  const naive = summary.metrics.find((item) => item.model === 'walk-forward-naive-lag-1')
+  const reasons: string[] = []
+  const nextActions: string[] = []
+  let status: PredictionInterpretation['status'] = 'acceptable'
+
+  if (!selected || !naive) {
+    return {
+      status: 'adjust',
+      label: '建议调整',
+      reasons: ['证据中缺少入选模型或上一期观测基线，无法完成相对判断。'],
+      nextActions: ['重新运行模型比较并检查 model_evidence.json 是否完整。'],
+      reflectionQuestions: ['为什么模型评估必须保留一个简单基线？']
+    }
+  }
+
+  const improvement = naive.rmse === 0 ? null : (naive.rmse - selected.rmse) / naive.rmse
+  if (improvement === null) {
+    status = 'caution'
+    reasons.push('上一期观测基线的 RMSE 为 0，当前数据无法用相对改进率比较。')
+  } else if (improvement <= 0) {
+    status = 'adjust'
+    reasons.push(`入选模型在独立测试集上没有超过简单基线，RMSE 相对变化为 ${(improvement * 100).toFixed(1)}%。`)
+    nextActions.push('回到模型选择，检查滚动验证是否稳定，并优先保留简单基线。')
+  } else {
+    reasons.push(`入选模型在独立测试集上的 RMSE 比上一期观测基线降低 ${(improvement * 100).toFixed(1)}%。`)
+    if (improvement < 0.05) {
+      status = 'caution'
+      nextActions.push('改进幅度较小，比较复杂度与收益后再决定是否采用。')
+    }
+  }
+
+  if (summary.testRows < 10) {
+    if (status === 'acceptable') status = 'caution'
+    reasons.push(`独立测试集只有 ${summary.testRows} 个样本，指标与覆盖率波动可能较大。`)
+    nextActions.push('补充更多连续时段数据，或在报告中明确小测试集限制。')
+  }
+
+  for (const interval of summary.intervals) {
+    if (interval.coverage + 0.1 < interval.level) {
+      if (status === 'acceptable') status = 'caution'
+      reasons.push(`${Math.round(interval.level * 100)}% 区间实际覆盖率只有 ${(interval.coverage * 100).toFixed(1)}%，明显低于标称水平。`)
+      nextActions.push('检查残差是否随时间变化，并考虑重新估计区间或变换目标变量。')
+    }
+  }
+
+  if (!nextActions.length) nextActions.push('继续检查残差图和业务合理性，再形成结论。')
+  return {
+    status,
+    label: status === 'acceptable' ? '可以继续' : status === 'caution' ? '需要注意' : '建议调整',
+    reasons,
+    nextActions: [...new Set(nextActions)],
+    reflectionQuestions: [
+      `为什么 ${summary.bestModel} 在滚动验证中被选中？`,
+      '独立测试集表现与训练段滚动验证是否一致？',
+      '残差图中是否存在连续同号、周期性或异常点？'
+    ]
+  }
+}
+
 /** 从沙箱证据文件提取可展示的客观结果；结构不完整时不猜测。 */
 export function summarizePredictionEvidence(value: unknown): PredictionEvidenceSummary | null {
   if (!value || typeof value !== 'object') return null

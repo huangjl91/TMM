@@ -17,6 +17,7 @@ import type { DataFileProfile, SessionFileView } from '@shared/intake'
 import { buildRealDataPreviewCode, humanSize, isReadableTabularFile } from '@shared/intake'
 import {
   buildPredictionBaselineCode,
+  interpretPredictionEvidence,
   summarizePredictionEvidence,
   type PredictionEvidenceSummary
 } from '@shared/prediction'
@@ -157,6 +158,7 @@ export function GuidedQuizPanel({
         targetColumn: yColumns[0] || null
       })
     : null
+  const predictionInterpretation = predictionEvidence ? interpretPredictionEvidence(predictionEvidence) : null
 
   useEffect(() => {
     setPredictionEvidence(null)
@@ -1016,6 +1018,20 @@ export function GuidedQuizPanel({
                 <div className="text-white/55">
                   模型选择仅使用训练段内部的 {predictionEvidence.selectionFolds} 折滚动时间验证；测试集只用于最终评估。
                 </div>
+                {predictionInterpretation ? (
+                  <div className={`rounded-lg border p-3 ${predictionInterpretation.status === 'acceptable' ? 'border-emerald-400/25 bg-emerald-500/[0.07]' : predictionInterpretation.status === 'caution' ? 'border-amber-400/25 bg-amber-500/[0.07]' : 'border-rose-400/25 bg-rose-500/[0.07]'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-white">结果解读</span>
+                      <span className="rounded bg-black/20 px-2 py-1 font-semibold text-white">{predictionInterpretation.label}</span>
+                    </div>
+                    <div className="mt-2 space-y-1 text-white/75">
+                      {predictionInterpretation.reasons.map((reason) => <div key={reason}>依据：{reason}</div>)}
+                    </div>
+                    <div className="mt-2 space-y-1 text-white/70">
+                      {predictionInterpretation.nextActions.map((action) => <div key={action}>下一步：{action}</div>)}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="grid gap-2 text-white/65 md:grid-cols-2">
                   <div>训练：{predictionEvidence.trainRows} 行，{predictionEvidence.trainRange}</div>
                   <div>测试：{predictionEvidence.testRows} 行，{predictionEvidence.testRange}</div>
@@ -1057,6 +1073,12 @@ export function GuidedQuizPanel({
                   <div className="mb-1 font-semibold text-white/80">学生结果填写框架</div>
                   <p>请依次说明：① 为什么采用时间顺序留出测试；② 各模型在同一测试集上的指标差异；③ 为什么按 {predictionEvidence.selectionMetric} 选择 {predictionEvidence.bestModel}；④ 80%/95% 区间覆盖了多少测试点，是否达到标称水平；⑤ 从残差图观察到的偏差和当前方法局限。数字必须引用上表及 model_evidence.json。</p>
                 </div>
+                {predictionInterpretation ? (
+                  <div className="rounded border border-violet-400/20 bg-violet-500/[0.06] p-3 text-white/70">
+                    <div className="mb-1 font-semibold text-violet-200">你需要能回答</div>
+                    {predictionInterpretation.reflectionQuestions.map((question) => <div key={question}>• {question}</div>)}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

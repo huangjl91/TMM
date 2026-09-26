@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { buildPredictionBaselineCode, summarizePredictionEvidence } from '../.tmp/prediction.mjs'
+import { buildPredictionBaselineCode, interpretPredictionEvidence, summarizePredictionEvidence } from '../.tmp/prediction.mjs'
 
 const root = resolve('.tmp/prediction-baseline')
 const attachmentDir = join(root, '附件')
@@ -78,6 +78,22 @@ assert.equal(manifest.timeFrequency.seasonalPeriod, 12)
 assert.deepEqual(manifest.skippedModels, [])
 assert.equal(summary.metrics.length, 4)
 assert.equal(summary.intervals.length, 2)
+const interpretation = interpretPredictionEvidence(summary)
+assert.equal(interpretation.status, 'caution')
+assert.ok(interpretation.reasons.some((reason) => reason.includes('只有 6 个样本')))
+assert.equal(interpretation.reflectionQuestions.length, 3)
+const adjustInterpretation = interpretPredictionEvidence({
+  ...summary,
+  bestModel: 'linear-trend',
+  testRows: 20,
+  metrics: [
+    { model: 'walk-forward-naive-lag-1', mae: 1, rmse: 1, mape: 1 },
+    { model: 'linear-trend', mae: 2, rmse: 2, mape: 2 }
+  ],
+  intervals: []
+})
+assert.equal(adjustInterpretation.status, 'adjust')
+assert.ok(adjustInterpretation.nextActions.some((action) => action.includes('模型选择')))
 assert.equal(summary.trainRows, 24)
 assert.equal(summary.testRows, 6)
 assert.equal(summarizePredictionEvidence({ schemaVersion: 'wrong' }), null)
