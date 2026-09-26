@@ -39,7 +39,8 @@ assert.equal(manifest.schemaVersion, 'tmm-model-evidence-v1')
 assert.deepEqual(manifest.algorithms.map((item) => item.id), [
   'walk-forward-naive-lag-1',
   'linear-trend',
-  'walk-forward-moving-average-3'
+  'walk-forward-moving-average-3',
+  'seasonal-naive-12'
 ])
 assert.ok(manifest.algorithms.every((item) => item.usesFutureInformation === false))
 assert.equal(manifest.split.trainRows, 24)
@@ -57,9 +58,37 @@ assert.equal(manifest.configurationSha256.length, 64)
 const summary = summarizePredictionEvidence(manifest)
 assert.ok(summary)
 assert.equal(summary.bestModel, manifest.selection.bestModel)
-assert.equal(summary.metrics.length, 3)
+assert.equal(manifest.timeFrequency.inferred, 'MS')
+assert.equal(manifest.timeFrequency.seasonalPeriod, 12)
+assert.deepEqual(manifest.skippedModels, [])
+assert.equal(summary.metrics.length, 4)
 assert.equal(summary.trainRows, 24)
 assert.equal(summary.testRows, 6)
 assert.equal(summarizePredictionEvidence({ schemaVersion: 'wrong' }), null)
 
-console.log('PASS  时间切分 → 三模型同集比较 → 指标选优 → 预测图 → 模型证据清单')
+const shortRoot = resolve('.tmp/prediction-seasonal-skip')
+const shortAttachmentDir = join(shortRoot, '附件')
+rmSync(shortRoot, { recursive: true, force: true })
+mkdirSync(shortAttachmentDir, { recursive: true })
+writeFileSync(
+  join(shortAttachmentDir, '短月度序列.csv'),
+  `${rows.slice(0, 19).join('\n')}\n`,
+  'utf8'
+)
+const shortCode = buildPredictionBaselineCode(
+  { kind: 'data', name: '短月度序列.csv', relPath: '附件/短月度序列.csv' },
+  { xColumn: '月份', targetColumn: '用电负荷_kWh', testRatio: 0.2 }
+)
+assert.ok(shortCode)
+writeFileSync(join(shortRoot, 'run_baseline.py'), shortCode, 'utf8')
+execFileSync(python, args, {
+  cwd: shortRoot,
+  stdio: 'pipe',
+  env: { ...process.env, MPLBACKEND: 'Agg', MPLCONFIGDIR: join(shortRoot, '.mplconfig') }
+})
+const shortManifest = JSON.parse(readFileSync(join(shortRoot, 'model_evidence.json'), 'utf8'))
+assert.equal(shortManifest.timeFrequency.inferred, 'MS')
+assert.equal(shortManifest.algorithms.some((item) => item.id.startsWith('seasonal-naive-')), false)
+assert.match(shortManifest.skippedModels[0].reason, /至少需要 24 行/)
+
+console.log('PASS  时间切分 → 基础与季节模型同集比较 → 指标选优 → 预测图 → 模型证据清单')

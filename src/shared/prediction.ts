@@ -152,6 +152,59 @@ predictions = {
     'linear-trend': trend_pred,
     'walk-forward-moving-average-3': moving_pred
 }
+algorithm_records = [
+    {
+        'id': 'walk-forward-naive-lag-1',
+        'description': '测试期每一点使用前一期已经观测到的真实值作为预测',
+        'usesFutureInformation': False
+    },
+    {
+        'id': 'linear-trend',
+        'description': '只用训练段拟合线性趋势，并外推整个测试段',
+        'usesFutureInformation': False,
+        'parameters': {'slope': float(trend_slope), 'intercept': float(trend_intercept)}
+    },
+    {
+        'id': 'walk-forward-moving-average-3',
+        'description': '使用预测时点之前最近 3 个已观测值的均值',
+        'usesFutureInformation': False,
+        'parameters': {'window': 3}
+    }
+]
+
+# 只有时间间隔可识别且训练段至少覆盖两个完整周期时，才加入季节朴素基线。
+inferred_frequency = pd.infer_freq(work['_time']) if len(work) >= 3 else None
+frequency_key = (inferred_frequency or '').lower()
+seasonal_period = None
+if frequency_key.startswith(('ms', 'me')):
+    seasonal_period = 12
+elif frequency_key.startswith(('qs', 'qe')):
+    seasonal_period = 4
+elif frequency_key.startswith('w'):
+    seasonal_period = 52
+elif frequency_key.startswith('d'):
+    seasonal_period = 7
+elif frequency_key.startswith('h'):
+    seasonal_period = 24
+
+skipped_models = []
+if seasonal_period and train_count >= 2 * seasonal_period:
+    seasonal_pred = np.asarray([
+        float(work['_target'].iloc[index - seasonal_period])
+        for index in range(train_count, len(work))
+    ], dtype=float)
+    seasonal_id = f'seasonal-naive-{seasonal_period}'
+    predictions[seasonal_id] = seasonal_pred
+    algorithm_records.append({
+        'id': seasonal_id,
+        'description': f'使用前一完整季节同位置的观测值，周期为 {seasonal_period}',
+        'usesFutureInformation': False,
+        'parameters': {'period': seasonal_period, 'inferredFrequency': inferred_frequency}
+    })
+else:
+    reason = '无法从时间字段识别支持的固定频率' if not seasonal_period else f'训练段至少需要 {2 * seasonal_period} 行以覆盖两个完整周期'
+    skipped_models.append({'id': 'seasonal-naive', 'reason': reason, 'inferredFrequency': inferred_frequency})
+
 metrics = {name: metric_set(values) for name, values in predictions.items()}
 best_model = min(metrics, key=lambda name: metrics[name]['RMSE'])
 best_pred = predictions[best_model]
@@ -163,9 +216,11 @@ result = pd.DataFrame({
     'naive_lag_1': naive_pred,
     'linear_trend': trend_pred,
     'moving_average_3': moving_pred,
-    'best_model_prediction': best_pred,
-    'residual': errors
 })
+if seasonal_period and train_count >= 2 * seasonal_period:
+    result[f'seasonal_naive_{seasonal_period}'] = seasonal_pred
+result['best_model_prediction'] = best_pred
+result['residual'] = errors
 result.to_csv('prediction_baseline_results.csv', index=False, encoding='utf-8-sig')
 
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=False)
@@ -174,6 +229,8 @@ ax1.plot(test_time, actual, marker='o', linewidth=1.7, label='测试集真实值
 ax1.plot(test_time, naive_pred, marker='s', linestyle='--', linewidth=1.3, label='上一期观测')
 ax1.plot(test_time, trend_pred, marker='^', linestyle='--', linewidth=1.3, label='线性趋势')
 ax1.plot(test_time, moving_pred, marker='d', linestyle='--', linewidth=1.3, label='3期移动平均')
+if seasonal_period and train_count >= 2 * seasonal_period:
+    ax1.plot(test_time, seasonal_pred, marker='x', linestyle='--', linewidth=1.3, label=f'季节朴素（周期{seasonal_period}）')
 ax1.set_title(f'预测模型同测试集比较：{TARGET_COLUMN}')
 ax1.set_ylabel(TARGET_COLUMN)
 ax1.grid(True, linestyle='--', alpha=0.35)
@@ -206,25 +263,9 @@ manifest = {
     'sourceSha256': source_hash,
     'configuration': configuration,
     'configurationSha256': hashlib.sha256(json.dumps(configuration, ensure_ascii=False, sort_keys=True).encode('utf-8')).hexdigest(),
-    'algorithms': [
-        {
-            'id': 'walk-forward-naive-lag-1',
-            'description': '测试期每一点使用前一期已经观测到的真实值作为预测',
-            'usesFutureInformation': False
-        },
-        {
-            'id': 'linear-trend',
-            'description': '只用训练段拟合线性趋势，并外推整个测试段',
-            'usesFutureInformation': False,
-            'parameters': {'slope': float(trend_slope), 'intercept': float(trend_intercept)}
-        },
-        {
-            'id': 'walk-forward-moving-average-3',
-            'description': '使用预测时点之前最近 3 个已观测值的均值',
-            'usesFutureInformation': False,
-            'parameters': {'window': 3}
-        }
-    ],
+    'algorithms': algorithm_records,
+    'skippedModels': skipped_models,
+    'timeFrequency': {'inferred': inferred_frequency, 'seasonalPeriod': seasonal_period},
     'split': {
         'strategy': 'chronological-holdout',
         'trainRows': int(train_count),
