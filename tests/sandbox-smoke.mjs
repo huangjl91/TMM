@@ -87,12 +87,14 @@ const errType = (r) => r.outcome?.error?.type ?? ''
 const errMsg = (r) => r.outcome?.error?.message ?? ''
 
 async function main() {
-  // 1. 正常出图：产物里要有内联 PNG
+  // 1. 正常出图：产物里要有内联 PNG，还要带 savefig 探针读到的图元数据
   const plot = await exec(
     [
       'import numpy as np, matplotlib.pyplot as plt',
       "x = np.linspace(0, 3, 50)",
-      "plt.plot(x, np.sin(x)); plt.title('灵敏度曲线'); plt.savefig('curve.png')",
+      "plt.plot(x, np.sin(x), label='sin'); plt.plot(x, np.cos(x), label='cos')",
+      "plt.xlabel('时间 t'); plt.ylabel('响应 f'); plt.title('灵敏度曲线'); plt.legend()",
+      "plt.savefig('curve.png', dpi=300)",
       "print('sum=', x.sum())"
     ].join('\n')
   )
@@ -103,6 +105,30 @@ async function main() {
     '中文标题不炸字体',
     !errMsg(plot).includes('Glyph') && !errMsg(plot).includes('missing from'),
     errMsg(plot).slice(0, 80)
+  )
+  const pm = png?.plotMeta
+  check(
+    'savefig 探针带回轴名、图例与 dpi',
+    pm?.dpi === 300 && pm.axes?.[0]?.xlabel === '时间 t' && pm.axes[0].ylabel === '响应 f' &&
+      pm.axes[0].title === '灵敏度曲线' && pm.axes[0].legend === true && pm.axes[0].curves === 2,
+    JSON.stringify(pm)
+  )
+  check('产物记录像素尺寸（图表规范检查用它判断清晰度）', Array.isArray(png?.px) && png.px[0] >= 1500, JSON.stringify(png?.px))
+
+  // 1b. 不是 matplotlib 存的图没有图元数据，规范检查只能让路
+  const raw = await exec(
+    [
+      'import base64, pathlib',
+      "pathlib.Path('raw.png').write_bytes(base64.b64decode(",
+      "  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='))",
+      "print('ok')"
+    ].join('\n')
+  )
+  const rawPng = (raw.outcome?.artifacts ?? []).find((a) => a.name === 'raw.png')
+  check(
+    '手写文件节的 PNG 不硬编造图元数据',
+    raw.outcome?.ok === true && rawPng && rawPng.plotMeta === undefined && rawPng.px?.[0] === 1,
+    JSON.stringify({ ok: raw.outcome?.ok, plotMeta: rawPng?.plotMeta, px: rawPng?.px })
   )
 
   // 2. pandas 这类科学计算栈不能被策略误伤

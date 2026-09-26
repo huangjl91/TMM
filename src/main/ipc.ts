@@ -6,31 +6,52 @@ import { getApiKey, hasApiKey, setApiKey } from './secrets'
 import {
   addRun,
   createSession,
+  getPlotIntent,
+  getFreeMessages,
   getSessionMessages,
+  getSessionQuestion,
   listAiUsage,
   listRuns,
   listSessions,
   loadSettings,
+  logAiUsage,
   MAX_PINNED_METHODS,
   pinMethod,
   pinnedMethods,
   saveSettings,
+  setPlotIntent,
+  setSessionQuestion,
   unpinMethod
 } from './repo'
 import { readArtifact, runCode, stop as stopRun } from './sandbox'
+import { filesOf, intake, openProblemPdf, readProblemPdf } from './intake'
 import { adopt, askHint, abort, send } from './agent/coach'
-import { currentStageId, openStage, stageCard, stageViews, submitStage } from './stage'
+import { abortFree, sendFree } from './agent/freechat'
+import { currentStageId, openStage, questionsOf, stageCard, stageViews, submitStage } from './stage'
 import { compilePaper, openPaperPdf, paperDraft, readPaperPdf, saveDraft, stopCompile } from './latex/compile'
 import { usageSummary } from './compliance/collect'
 import { exportUsagePdf, openUsagePdf, usagePdf } from './compliance/export'
+import { getGuidedState, handleGuidedAskAi, handleGuidedChoose, handleGuidedReanalyze, handleGuidedSync } from './guidedQuiz'
 import { methodById } from '../shared/methods'
+import { ERROR_ESCALATE_STREAK, errorGuide, plotDigest, plotHints, sameErrorStreak, type PlotAnswers } from '../shared/plots'
 import type { ArtifactContent, RunPayload, RunRecord } from '../shared/sandbox'
+import type { IntakeResult, SessionFileView } from '../shared/intake'
+import type { QuestionFocus } from '../shared/questions'
 import type { AdoptPayload, StageView, SubmissionPayload } from '../shared/agent'
 import type { CompileResult, PaperDraft } from '../shared/latex'
 import type { UsageExportResult, UsageSummary } from '../shared/compliance'
+import type { GuidedSessionState, AiAdvice } from '../shared/guidedQuiz'
 import {
   IPC,
   type ActiveSettings,
+  type ExplainShownPayload,
+  type FreeSendPayload,
+  type GuidedAskAiPayload,
+  type GuidedChoosePayload,
+  type GuidedGetPayload,
+  type GuidedReanalyzePayload,
+  type GuidedSyncPayload,
+  type PlotAnswerPayload,
   type ProviderId,
   type SendPayload,
   type SettingsView,
@@ -101,9 +122,40 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.SessionList, () => listSessions())
   ipcMain.handle(IPC.SessionGet, (_e, id: number) => (Number.isInteger(id) ? getSessionMessages(id) : []))
+  ipcMain.handle(IPC.SessionIntake, (_e): Promise<IntakeResult | null> => intake())
+  ipcMain.handle(IPC.SessionFiles, (_e, sessionId: unknown): SessionFileView[] => filesOf(needSession(sessionId)))
+  ipcMain.handle(IPC.SessionProblemPdf, (_e, sessionId: unknown) => readProblemPdf(needSession(sessionId)))
+  ipcMain.handle(IPC.SessionProblemOpen, (_e, sessionId: unknown) => openProblemPdf(needSession(sessionId)))
+  ipcMain.handle(IPC.SessionQuestions, (_e, sessionId: unknown): QuestionFocus => {
+    const sid = needSession(sessionId)
+    return { questions: questionsOf(sid), focus: getSessionQuestion(sid) }
+  })
+  ipcMain.handle(
+    IPC.SessionQuestionSet,
+    (_e, sessionId: unknown, idx: unknown): number => {
+      const sid = needSession(sessionId)
+      const n = Number.isInteger(idx) ? Number(idx) : 0
+      setSessionQuestion(sid, n)
+      return getSessionQuestion(sid)
+    }
+  )
   ipcMain.handle(IPC.ChatSend, (_e, payload: SendPayload) => send(payload))
   ipcMain.handle(IPC.ChatAbort, (_e, id: number | null) =>
     abort(Number.isInteger(id as number) ? (id as number) : null)
+  )
+
+  /** 右侧 AI 对话框：与教练并列的第二条链路，历史和留痕都靠 kind='free' 分流 */
+  ipcMain.handle(IPC.ChatFree, (_e, payload: FreeSendPayload) => {
+    const text = typeof payload?.text === 'string' ? payload.text : ''
+    if (text.length > 20_000) throw new Error('这一条太长了，拆成几句分别问效果更好')
+    const sid = payload?.sessionId
+    return sendFree({ sessionId: Number.isInteger(sid) ? (sid as number) : null, text })
+  })
+  ipcMain.handle(IPC.ChatFreeAbort, (_e, id: number | null) =>
+    abortFree(Number.isInteger(id as number) ? (id as number) : null)
+  )
+  ipcMain.handle(IPC.ChatFreeHistory, (_e, sessionId: unknown) =>
+    Number.isInteger(sessionId) && (sessionId as number) > 0 ? getFreeMessages(sessionId as number) : []
   )
   ipcMain.handle(IPC.RuntimeInfo, () => runtimeInfo())
 
@@ -117,9 +169,14 @@ export function registerIpc(): void {
       sessionId = createSession(`代码草稿 ${new Date().toLocaleString('zh-CN')}`, 'sandbox', 'local')
     }
     const id = sessionId as number
+    const stageId = currentStageId(id)
     const attempt = await runCode(id, code)
     const runId = addRun(id, code, attempt)
-    return {
+    const hints = plotHints(attempt.outcome.artifacts).map((h) => `${h.name}：${h.text}`)
+    if (hints.length) {
+      logAiUsage(id, stageId, 'plot_hint', `图表规范检查报了 ${String(hints.length)} 条：${hints.join(' / ')}`.slice(0, 600))
+    }
+    const record: RunRecord = {
       ...attempt.outcome,
       id: runId,
       sessionId: id,
@@ -129,6 +186,25 @@ export function registerIpc(): void {
       durationMs: attempt.durationMs,
       createdAt: Date.now()
     }
+    if (hints.length) record.plotHints = hints
+    const err = attempt.outcome.error
+    if (err) {
+      const streak = sameErrorStreak(listRuns(id), err.type)
+      const guide = errorGuide(err, streak)
+      if (guide) {
+        record.errorStreak = streak
+        // 第一次只给清单；连着第二次才升级成「发给教练」，免得每错一次就把学生推给模型
+        if (streak >= ERROR_ESCALATE_STREAK) {
+          logAiUsage(
+            id,
+            stageId,
+            'error_hint',
+            `同类报错（${guide.type}）连续第 ${String(streak)} 次：${err.message.slice(0, 160)}；排查方向 ${guide.checks.join('；')}`.slice(0, 600)
+          )
+        }
+      }
+    }
+    return record
   })
 
   ipcMain.handle(IPC.CodeStop, (_e, sessionId: number) => (Number.isInteger(sessionId) ? stopRun(sessionId) : false))
@@ -175,6 +251,38 @@ export function registerIpc(): void {
   })
   ipcMain.handle(IPC.HintAsk, (_e, sessionId: unknown) => askHint(needSession(sessionId)))
   ipcMain.handle(IPC.ScaffoldAdopt, (_e, payload: AdoptPayload) => adopt(payload))
+  /** 讲解只留痕不返回内容：语料在渲染层直接 import 自 shared，主进程这边只负责记「看到第几层」 */
+  ipcMain.handle(IPC.ExplainShown, (_e, payload: ExplainShownPayload): boolean => {
+    const sid = Number(payload?.sessionId)
+    const title = String(payload?.title ?? '').trim().slice(0, 60)
+    if (!Number.isInteger(sid) || sid < 1 || !title) return false
+    const level = Math.max(0, Math.min(3, Number(payload?.level) || 0))
+    logAiUsage(
+      sid,
+      currentStageId(sid),
+      'explain_shown',
+      `讲到第 ${String(level + 1)} 层：${title}（${payload?.kind === 'method' ? '方法卡' : '名词'}）`
+    )
+    return true
+  })
+  /** 绘图三问：读回来给 Python 面板判断闸门开不开，写进去才允许向 Executor 要代码骨架 */
+  ipcMain.handle(IPC.PlotGet, (_e, sessionId: unknown, stageId: unknown): PlotAnswers | null => {
+    const n = Number(stageId)
+    return getPlotIntent(needSession(sessionId), Number.isInteger(n) && n >= 1 ? n : 1)
+  })
+  ipcMain.handle(IPC.PlotAnswer, (_e, payload: PlotAnswerPayload): PlotAnswers => {
+    const sid = needSession(payload?.sessionId)
+    const n = Number(payload?.stageId)
+    const stageId = Number.isInteger(n) && n >= 1 ? n : currentStageId(sid)
+    const clean: PlotAnswers = {}
+    for (const key of ['question', 'axes', 'takeaway'] as const) {
+      const v = payload?.answers?.[key]
+      if (typeof v === 'string') clean[key] = v.trim().slice(0, 400)
+    }
+    setPlotIntent(sid, stageId, clean)
+    logAiUsage(sid, stageId, 'plot_intent', `绘图三答：${plotDigest(clean)}`.slice(0, 600))
+    return clean
+  })
   ipcMain.handle(IPC.UsageList, (_e, sessionId: unknown) => listAiUsage(needSession(sessionId)))
 
   ipcMain.handle(IPC.PaperDraft, (_e, sessionId: unknown): PaperDraft => paperDraft(needSession(sessionId)))
@@ -209,5 +317,37 @@ export function registerIpc(): void {
     const sid = needSession(sessionId)
     // 另存对话框挂在这条会话的窗口上，学生点「取消」不是错误，savedTo 给 null 就行
     return exportUsagePdf(sid, BrowserWindow.fromWebContents(_e.sender))
+  })
+
+  ipcMain.handle(IPC.GuidedGet, (_e, payload: GuidedGetPayload): GuidedSessionState => {
+    const sid = needSession(payload?.sessionId)
+    const qIdx = Number.isInteger(payload?.questionIdx) ? Number(payload.questionIdx) : 1
+    return getGuidedState(sid, qIdx)
+  })
+
+  ipcMain.handle(IPC.GuidedChoose, (_e, payload: GuidedChoosePayload): GuidedSessionState => {
+    const sid = needSession(payload?.sessionId)
+    return handleGuidedChoose(sid, payload.questionIdx, payload.step, {
+      pickedKey: payload.pickedKey,
+      pickedText: payload.pickedText,
+      pickedMeans: payload.pickedMeans,
+      userNote: payload.userNote
+    })
+  })
+
+  ipcMain.handle(IPC.GuidedAskAi, (_e, payload: GuidedAskAiPayload): Promise<AiAdvice> => {
+    const sid = needSession(payload?.sessionId)
+    return handleGuidedAskAi(sid, payload.questionIdx, payload.step, payload.ask, payload.options)
+  })
+
+  ipcMain.handle(IPC.GuidedSync, (_e, payload: GuidedSyncPayload): { ok: boolean; message: string } => {
+    const sid = needSession(payload?.sessionId)
+    return handleGuidedSync(sid, payload.questionIdx)
+  })
+
+  ipcMain.handle(IPC.GuidedReanalyze, (_e, payload: GuidedReanalyzePayload): Promise<GuidedSessionState> => {
+    const sid = needSession(payload?.sessionId)
+    const qIdx = Number.isInteger(payload?.questionIdx) ? Number(payload.questionIdx) : 1
+    return handleGuidedReanalyze(sid, qIdx)
   })
 }

@@ -18,12 +18,42 @@ export const SCAFFOLD_CODE = [
   "print('结果：', res.fun)"
 ].join('\n')
 
-function coachReply(userText) {
+function quizIfAllowed(sys) {
+  if (!/选择题闸门=开/.test(sys)) return undefined
+  return [
+    {
+      ask: '这一问你打算先走哪条路？',
+      multi: false,
+      options: [
+        { key: 'A', text: '先按附件字段做加权评分', means: '权重要由数据本身的离散程度定' },
+        { key: 'B', text: '先建约束规划再比方案', means: '求解成本更高，但约束能写全' },
+        // 故意写成两句陈述：主进程的选项闸门应当丢掉它
+        {
+          key: 'C',
+          text: '综上所述本文采用层次分析法',
+          means: '我们先请专家打分确定权重。然后再用 TOPSIS 排序。'
+        }
+      ]
+    },
+    {
+      ask: '缺失值这一轮怎么处置？',
+      multi: false,
+      options: [
+        { key: 'A', text: '同组中位数插补', means: '保住样本量，但要说明为何不偏' },
+        { key: 'B', text: '单独标记成一类', means: '后续把缺失本身当特征看' }
+      ]
+    }
+  ]
+}
+
+function coachReply(userText, sys) {
   const submitted = userText.includes('任务卡')
+  const quiz = submitted ? undefined : quizIfAllowed(sys)
   return JSON.stringify({
     next_question: submitted
       ? '这三格内容里，哪一条是你自己核对过附件原文的？'
       : '第二问的评价对象和评价指标分别是什么？',
+    ...(quiz ? { quiz } : {}),
     checks: submitted
       ? [
           { item: '每问的输入输出明确', passed: true },
@@ -79,20 +109,24 @@ export function startMockLlm() {
     req.on('end', () => {
       const o = JSON.parse(body || '{}')
       const messages = Array.isArray(o.messages) ? o.messages : []
-      const sys = String(messages[0]?.content ?? '')
+      const nonSystem = messages.filter((m) => m?.role !== 'system')
+      const sys = String(messages.find((m) => m?.role === 'system')?.content ?? '')
       const isExecutor = sys.startsWith('你是 Executor')
       const isCritic = sys.startsWith('判断下面这段')
       const lastUser = String([...messages].reverse().find((m) => m?.role === 'user')?.content ?? '')
       calls.push({
         role: isExecutor ? 'executor' : isCritic ? 'critic' : 'coach',
         stream: o.stream === true,
-        sys: sys.slice(0, 8000)
+        sys: sys.slice(0, 8000),
+        user: lastUser.slice(0, 4000),
+        // 去掉 system 之后的对话：验证上一轮的选择题确实回到了教练上下文里
+        joined: nonSystem.map((m) => `${m.role}\u0001${String(m.content ?? '')}`).join('\u0002').slice(0, 40000)
       })
       const model = String(o.model ?? 'mock')
       let text
       if (isExecutor) text = JSON.stringify({ kind: 'code', fieldKey: null, content: SCAFFOLD_CODE })
       else if (isCritic) text = JSON.stringify({ violation: false, kind: 'none', evidence: '' })
-      else text = coachReply(lastUser)
+      else text = coachReply(lastUser, sys)
       if (o.stream === true) sse(res, text, model)
       else {
         res.writeHead(200, { 'content-type': 'application/json' })

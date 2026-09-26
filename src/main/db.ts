@@ -99,6 +99,53 @@ const MIGRATIONS: string[] = [
      method_id  TEXT NOT NULL,
      pinned_at  INTEGER NOT NULL,
      PRIMARY KEY (session_id, method_id)
+   );`,
+  // 导入的赛题与附件：文件本体落在会话工作区，库里只记清单和提取摘要
+  `CREATE TABLE session_files (
+     id         INTEGER PRIMARY KEY AUTOINCREMENT,
+     session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+     kind       TEXT NOT NULL,
+     name       TEXT NOT NULL,
+     rel_path   TEXT NOT NULL DEFAULT '',
+     size       INTEGER NOT NULL DEFAULT 0,
+     digest_kind TEXT NOT NULL DEFAULT 'binary',
+     digest     TEXT NOT NULL DEFAULT '',
+     created_at INTEGER NOT NULL
+   );
+   CREATE INDEX idx_files_session ON session_files(session_id, id);`,
+  // 逐问轴：焦点问题跟着会话走，教练 briefing 与方法检索都要在进程内读到它
+  `ALTER TABLE sessions ADD COLUMN question_idx INTEGER NOT NULL DEFAULT 0;`,
+  // 绘图三问的答案按阶段存：阶段 6/8 要代码骨架之前必须先答，Executor 与教练都围着这三答问
+  `CREATE TABLE plot_intents (
+     session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+     stage_id   INTEGER NOT NULL,
+     question   TEXT NOT NULL DEFAULT '',
+     axes       TEXT NOT NULL DEFAULT '',
+     takeaway   TEXT NOT NULL DEFAULT '',
+     updated_at INTEGER NOT NULL,
+     PRIMARY KEY (session_id, stage_id)
+   );`,
+  // 引导式解题中心：从读题感知到宏观选型、机理推导、科研绘图与结论
+  `CREATE TABLE IF NOT EXISTS guided_choices (
+     session_id   INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+     question_idx INTEGER NOT NULL,
+     step         TEXT NOT NULL,
+     picked_key   TEXT NOT NULL,
+     picked_text  TEXT NOT NULL,
+     picked_means TEXT NOT NULL,
+     user_note    TEXT NOT NULL DEFAULT '',
+     updated_at   INTEGER NOT NULL,
+     PRIMARY KEY (session_id, question_idx, step)
+   );`,
+  // 赛题深度解构与定制化引导题目缓存（告别千篇一律模板）
+  `CREATE TABLE IF NOT EXISTS guided_analyses (
+     session_id     INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+     question_idx   INTEGER NOT NULL,
+     knowledge_json TEXT NOT NULL,
+     questions_json TEXT NOT NULL,
+     elements_json  TEXT NOT NULL DEFAULT '{}',
+     updated_at     INTEGER NOT NULL,
+     PRIMARY KEY (session_id, question_idx)
    );`
 ]
 

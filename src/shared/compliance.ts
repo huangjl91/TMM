@@ -144,7 +144,9 @@ const ROLE_LABEL: Record<string, string> = {
   coach: '教练提问',
   scaffold: '示例（需自行改写核实）',
   submission: '任务卡提交',
-  system: '系统'
+  system: '系统',
+  /** 右侧 AI 对话框的通用问答：不走阶段 rubric，但同样过反代写、同样留痕 */
+  free: '自由问答'
 }
 
 /** 学生消息与助手闲聊在库里 kind 都是 chat，必须先按角色分，否则会把学生标成「助手」 */
@@ -219,8 +221,90 @@ export function reportGaps(r: UsageReport): string[] {
   if (given > adopted) gaps.push(`示例给过 ${String(given)} 次，只有 ${String(adopted)} 次记为「已采纳」：采纳位置要能对上论文/附录，漏的补上。`)
   const undone = r.stages.filter((s) => s.blocking && s.status !== 'done')
   if (undone.length) gaps.push(`还有强制阶段未完成：${undone.map((s) => s.title).join('、')}。`)
-  if (!r.events.some((e) => e.action === 'coach_reply')) gaps.push('没有任何教练提问记录：这份文件说明不了交互过程。')
+  // 右侧自由问答也算「交互过程」：只用了那一栏的会话，不该被判成没有记录
+  if (!r.events.some((e) => e.action === 'coach_reply' || e.action === 'free_chat'))
+    gaps.push('没有任何教练提问或自由问答记录：这份文件说明不了交互过程。')
+  gaps.push(...guidanceGaps(r))
   return gaps
+}
+
+/**
+ * M6 的引导交互单独成节：这些留痕记的是「学生自己被问到、自己答了什么」，
+ * 和 scaffold_given 那类「AI 给了什么」是两回事。
+ */
+export const GUIDANCE_ACTIONS = [
+  'intake_problem',
+  'intake_data',
+  'quiz_answered',
+  'explain_shown',
+  'plot_intent',
+  'plot_hint',
+  'error_hint'
+] as const
+
+export interface GuidanceRow {
+  action: string
+  label: string
+  count: number
+  stages: string
+  lastAt: number
+  /** 这类留痕全程没写模型名 = 本机发生的，没经过 AI */
+  local: boolean
+}
+
+export function guidanceRows(events: ReportEvent[], policy: PolicyConfig): GuidanceRow[] {
+  return GUIDANCE_ACTIONS.map((action) => {
+    const rows = events.filter((e) => e.action === action)
+    const stages = [...new Set(rows.map((e) => e.stageId).filter((x): x is number => typeof x === 'number'))].sort(
+      (a, b) => a - b
+    )
+    return {
+      action,
+      label: policy.actionLabels[action] ?? policy.unknownActionLabel,
+      count: rows.length,
+      stages: stages.length ? stages.join('、') : '—',
+      lastAt: rows.length ? Math.max(...rows.map((e) => e.at)) : 0,
+      local: rows.length > 0 && rows.every((e) => !e.model)
+    }
+  })
+}
+
+/** 引导环节的自洽检查：痕迹对不上时，这份文件讲不出「学生自己想过」的故事 */
+function guidanceGaps(r: UsageReport): string[] {
+  const gaps: string[] = []
+  const n = (action: string): number => r.events.filter((e) => e.action === action).length
+  if (!n('plot_intent') && (n('plot_hint') > 0 || r.extra.codeRuns > 0))
+    gaps.push('跑过代码或出过图，却没有「绘图三答」的留痕：这张图要回答哪句话是你自己说的，还是默认了别人的说法？回到第 6 阶段在 Python 面板补答一次。')
+  if (!n('quiz_answered') && r.events.some((e) => e.action === 'hint_escalation'))
+    gaps.push('一次诊断选择题都没答过，却要过提示：这份文件里你自主判断的痕迹偏少，可以回到第 1、2、4 阶段把选择题答完再往下走。')
+  return gaps
+}
+
+function guidanceBlock(rows: GuidanceRow[]): string {
+  const body = rows
+    .map((x) =>
+      [
+        texCell(x.label),
+        String(x.count),
+        texCell(x.stages),
+        x.lastAt ? texEscape(fmtTime(x.lastAt)) : '—',
+        texCell(x.count ? (x.local ? '本机检查，未调用模型' : '经过模型') : '—')
+      ].join(' & ') + ' \\\\'
+    )
+    .join('\n')
+  return `\\begin{longtable}{p{4.2cm}p{1.1cm}p{1.8cm}p{2.6cm}p{4.7cm}}
+\\toprule
+引导环节 & 次数 & 发生阶段 & 最近一次 & 是否经过模型 \\\\
+\\midrule
+\\endfirsthead
+\\toprule
+引导环节 & 次数 & 发生阶段 & 最近一次 & 是否经过模型 \\\\
+\\midrule
+\\endhead
+\\bottomrule
+\\endlastfoot
+${body}
+\\end{longtable}`
 }
 
 /** 面板上看的体检结果：整份留痕太重，只回统计与缺口，正文留在导出时再生成 */
@@ -349,6 +433,8 @@ function turnBlock(t: ReportTurn): string {
 export function buildUsageTex(r: UsageReport): string {
   const p = r.policy
   const counts = summarizeEvents(r.events, p)
+  const guidance = guidanceRows(r.events, p)
+  const gGaps = guidanceGaps(r)
   const titleOf = (id: number | null): string => {
     if (id === null) return '—'
     const s = r.stages.find((x) => x.id === id)
@@ -438,12 +524,17 @@ ${r.stages.length ? stageTable(r.stages) : '— & （无阶段记录） & — & 
 \\section*{五、AI 参与事件清单}
 ${eventsBlock(r.events, p, titleOf)}
 
-\\section*{六、完整交互过程}
+\\section*{六、引导交互明细}
+下面几项是引导环节留下的痕迹，记录的是你自己被问到、自己答了什么；标「本机检查」的那几项内容没有发给模型。
+${guidanceBlock(guidance)}
+${gGaps.length ? `{\\small \\color{red}引导环节的缺口：${gGaps.map((g) => texParas(g)).join(' ')}}` : ''}
+
+\\section*{七、完整交互过程}
 以下按时间顺序列出全部师生往来内容，未做删减；教练一栏本身只有提问、检查点与提示，不含论文正文。
 \\bigskip
 ${r.turns.length ? r.turns.map(turnBlock).join('\n') : '（本次会话没有交互记录）'}
 
-\\section*{七、核实声明}
+\\section*{八、核实声明}
 \\begin{enumerate}[label=\\textbf{\\arabic*.},leftmargin=2.2em,itemsep=2pt]
 ${p.rules.map((x) => `  \\item ${texParas(x)}`).join('\n')}
 \\end{enumerate}

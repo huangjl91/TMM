@@ -5,7 +5,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, wr
 import { app } from 'electron'
 import { basename, join } from 'node:path'
 import { detectToolchain, pythonInvocation } from '../runtime'
-import type { ArtifactContent, ArtifactInfo, RunOutcome, SandboxError, SandboxLimits } from '../../shared/sandbox'
+import type { ArtifactContent, ArtifactInfo, PlotMeta, RunOutcome, SandboxError, SandboxLimits } from '../../shared/sandbox'
 
 export const TIMEOUT_MS = 60_000
 export const MEM_MB = 2048
@@ -98,17 +98,41 @@ function childEnv(workspace: string): NodeJS.ProcessEnv {
   }
 }
 
+function asPlotMeta(v: unknown): PlotMeta | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const p = v as Record<string, unknown>
+  const axes = Array.isArray(p.axes)
+    ? p.axes
+        .filter((a): a is Record<string, unknown> => Boolean(a) && typeof a === 'object')
+        .map((a) => ({
+          xlabel: String(a.xlabel ?? ''),
+          ylabel: String(a.ylabel ?? ''),
+          title: String(a.title ?? ''),
+          legend: Boolean(a.legend),
+          curves: Number(a.curves ?? 0)
+        }))
+    : []
+  return { dpi: Number(p.dpi ?? 0), figWidth: Number(p.figWidth ?? 0), figHeight: Number(p.figHeight ?? 0), axes }
+}
+
 function asArtifacts(v: unknown): ArtifactInfo[] {
   if (!Array.isArray(v)) return []
   return v
     .filter((a): a is Record<string, unknown> => Boolean(a) && typeof a === 'object')
-    .map((a) => ({
-      name: String(a.name ?? ''),
-      ext: String(a.ext ?? ''),
-      size: Number(a.size ?? 0),
-      inline: Boolean(a.inline),
-      dataUrl: typeof a.dataUrl === 'string' ? a.dataUrl : undefined
-    }))
+    .map((a) => {
+      const px = Array.isArray(a.px) ? a.px.map(Number) : undefined
+      const info: ArtifactInfo = {
+        name: String(a.name ?? ''),
+        ext: String(a.ext ?? ''),
+        size: Number(a.size ?? 0),
+        inline: Boolean(a.inline),
+        dataUrl: typeof a.dataUrl === 'string' ? a.dataUrl : undefined
+      }
+      const meta = asPlotMeta(a.plotMeta)
+      if (meta) info.plotMeta = meta
+      if (px && px.length === 2 && px.every((n) => Number.isFinite(n))) info.px = [px[0] as number, px[1] as number]
+      return info
+    })
     .filter((a) => a.name.length > 0 && a.name === basename(a.name))
 }
 

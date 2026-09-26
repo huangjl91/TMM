@@ -1,4 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { Explainer } from './Explainer'
+import { EXPLAIN_MISSING_HINT, explainHits, methodExplainSource, type ExplainSource } from '@shared/explain'
 import { methodById, methodsForStage, searchMethods, type MethodCard } from '@shared/methods'
 
 interface Props {
@@ -6,19 +8,21 @@ interface Props {
   stageId: number
   pinned: string[]
   onPin: (m: MethodCard, on: boolean) => void
+  onExplain?: (src: ExplainSource, level: number) => void
 }
 
 /**
  * 方法库浏览器。检索是渲染层本地纯函数（shared/methods.ts），不走 IPC：
  * 卡是随应用打包的静态知识，不需要主进程参与。只有「钉了哪几张」落库。
  */
-export function MethodPanel({ sessionId, stageId, pinned, onPin }: Props): ReactNode {
+export function MethodPanel({ sessionId, stageId, pinned, onPin, onExplain }: Props): ReactNode {
   const [query, setQuery] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
 
   const cards = useMemo(() => searchMethods(query, { stageId, limit: 8 }), [query, stageId])
   const stageOwn = useMemo(() => methodsForStage(stageId, 1).length > 0, [stageId])
   const pinnedCards = pinned.map((id) => methodById(id)).filter((m): m is MethodCard => m !== undefined)
+  const termHits = useMemo(() => (query && !cards.length ? explainHits(query) : []), [query, cards.length])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col border-t border-white/10">
@@ -59,9 +63,14 @@ export function MethodPanel({ sessionId, stageId, pinned, onPin }: Props): React
           </p>
         ) : null}
         {cards.length === 0 ? (
-          <p className="py-2 text-[11px] text-white/30">
-            没找到相关方法。换个说法试试，或者清空搜索框看本阶段常用方法。
-          </p>
+          <div className="space-y-1.5 py-2">
+            <p className="text-[11px] leading-4 text-white/30">
+              没找到相关方法卡。{termHits.length ? '下面这几个名词倒是能讲：' : EXPLAIN_MISSING_HINT}
+            </p>
+            {termHits.map((h) => (
+              <Explainer key={`${h.kind}:${h.ref}`} src={h} onShown={(lv) => onExplain?.(h, lv)} />
+            ))}
+          </div>
         ) : (
           cards.map((m) => (
             <div key={m.id} className="border-b border-white/5 py-1.5">
@@ -77,6 +86,10 @@ export function MethodPanel({ sessionId, stageId, pinned, onPin }: Props): React
               </button>
               {openId === m.id ? (
                 <div className="mt-1 space-y-1.5 pl-5 text-[11px] leading-4">
+                  {(() => {
+                    const src = methodExplainSource(m.id)
+                    return src ? <Explainer src={src} onShown={(lv) => onExplain?.(src, lv)} /> : null
+                  })()}
                   <Line label="什么时候想它" text={m.signals.join('；')} />
                   <Line label="适用" text={m.when} />
                   <Line label="数据要求" text={m.needs} />

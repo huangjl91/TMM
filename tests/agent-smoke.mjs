@@ -260,6 +260,101 @@ check('钉过方法后只用钉选的那几张，自动匹配让位', () => {
   assert.match(H.coachBriefing(8, 5), /TOPSIS/)
 })
 
+check('逐问轴：阶段 1 拆出三问后，按问字段才真的拆开', () => {
+  H.fake._reset()
+  const sid = 31
+  H.submitStage(sid, 1, {
+    problems: '问题1：求单相机安装高度\n问题2：设计双相机布局方案\n问题3：加入导轨后的布局优化'
+  })
+  const qs = H.questionsOf(sid)
+  assert.deepEqual(qs.map((q) => q.idx), [1, 2, 3])
+  const card = H.stageCard(sid, 5)
+  const obj = card.fields.find((f) => f.key === 'objective')
+  assert.deepEqual(obj.questions.map((q) => q.idx), [1, 2, 3])
+  assert.equal(obj.content, '')
+  // 没标的字段照旧整格填
+  const symbols = H.stageCard(sid, 3).fields.find((f) => f.key === 'symbols')
+  assert.equal(symbols.questions, undefined)
+})
+
+check('逐问内容按 q<N>:key 存，未拆问的字段不收前缀 key', () => {
+  const sid = 31
+  H.submitStage(sid, 5, {
+    'q1:objective': '最小化总成本，含运输与加班',
+    'q3:objective': '导轨长度上限下的布局最优',
+    symbols: '不该收',
+    'q1:symbols': '更不该收'
+  })
+  const obj = H.stageCard(sid, 5).fields.find((f) => f.key === 'objective')
+  assert.equal(obj.questions.find((q) => q.idx === 1).content, '最小化总成本，含运输与加班')
+  assert.equal(obj.questions.find((q) => q.idx === 2).content, '')
+  assert.equal(obj.questions.find((q) => q.idx === 3).content, '导轨长度上限下的布局最优')
+})
+
+check('拆分前写的整格内容归到问题 1，不凭空消失', () => {
+  const sid = 32
+  H.submitStage(sid, 5, { objective: '旧版本：先写成一整段' })
+  H.submitStage(sid, 1, { problems: '问题1：第一问的复述内容\n问题2：第二问的复述内容' })
+  const obj = H.stageCard(sid, 5).fields.find((f) => f.key === 'objective')
+  assert.equal(obj.questions[0].content, '旧版本：先写成一整段')
+  assert.equal(obj.questions[1].content, '')
+})
+
+check('coachBriefing 报逐问进度，方法候选只围着聚焦问转', () => {
+  const sid = 33
+  H.submitStage(sid, 1, {
+    problems: '问题1：求单相机安装高度\n问题2：设计双相机布局方案\n问题3：加入导轨后的布局优化'
+  })
+  H.submitStage(sid, 5, {
+    'q1:objective': '多个指标合成得分，先用熵权法定权重，再看理想解距离',
+    'q2:objective': '两个方案比较用层次分析法，判断矩阵要做一致性检验'
+  })
+  H.fake.setSessionQuestion(sid, 2)
+  const b = H.coachBriefing(sid, 5)
+  assert.match(b, /逐问进度：问题 1 1\/3，问题 2 1\/3，问题 3 0\/3/)
+  assert.match(b, /当前聚焦 问题 2/)
+  assert.match(b, /设计双相机布局方案/)
+  const at2 = H.methodHints(sid, 5).cards.map((c) => c.id)
+  assert.ok(at2.includes('ahp'), `聚焦第 2 问没挑出层次分析法：${at2.join(',')}`)
+  assert.ok(!at2.includes('entropy-weight'), `聚焦第 2 问却把第 1 问的熵权法端进来了：${at2.join(',')}`)
+  H.fake.setSessionQuestion(sid, 1)
+  const at1 = H.methodHints(sid, 5).cards.map((c) => c.id)
+  assert.ok(at1.includes('entropy-weight'), `聚焦第 1 问没挑出熵权法：${at1.join(',')}`)
+  assert.ok(!at1.includes('ahp'), `聚焦第 1 问却把第 2 问的层次分析法端进来了：${at1.join(',')}`)
+})
+
+check('导入的题面与附件会出现在教练上下文里', () => {
+  const sid = 31
+  H.fake._setFiles(sid, [
+    {
+      id: 1,
+      kind: 'problem',
+      name: 'C题.pdf',
+      relPath: '题目/C题.pdf',
+      size: 2048,
+      digestKind: 'pdf',
+      digest: '在目标定位问题中，相机像元尺寸为 3.55um，求安装高度。',
+      needsVerify: true,
+      createdAt: 0
+    },
+    {
+      id: 2,
+      kind: 'data',
+      name: '附件1.csv',
+      relPath: '附件/附件1.csv',
+      size: 512,
+      digestKind: 'csv',
+      digest: '列数 3，数据行数约 200',
+      needsVerify: false,
+      createdAt: 0
+    }
+  ])
+  const b = H.coachBriefing(sid, 5)
+  assert.match(b, /赛题原文（导入自 C题.pdf，PDF 提取结果可能错乱，须学生核对）/)
+  assert.match(b, /3\.55um/)
+  assert.match(b, /附件\/文件名/)
+})
+
 check('学生主动要提示：逐级升到 L3 封顶', () => {
   H.fake._reset()
   H.currentStageId(6)
@@ -277,6 +372,167 @@ check('已完成阶段不因要提示被改回未完成', () => {
 check('未知阶段编号被拒绝而不是崩', () => {
   assert.equal(H.openStage(7, 999).ok, false)
   assert.throws(() => H.submitStage(7, 999, { a: 'b' }), /没有这个阶段/)
+})
+
+console.log('\n— M6-3 诊断选择题（quiz）：解析边界、不判对错、选项闸门 —')
+
+const QUIZ_ASK_LONG = 'A'.repeat(200)
+const QUIZ_MEANS_LONG = '要'.repeat(300)
+
+check('quiz 封顶：最多 2 题、每题 5 个选项，ask 与 means 截断，重复 key 重编号', () => {
+  const r = H.parseCoachReply(
+    JSON.stringify({
+      next_question: '你打算往哪条路走？',
+      quiz: [
+        {
+          ask: QUIZ_ASK_LONG,
+          multi: true,
+          options: Array.from({ length: 8 }, (_, i) => ({ key: 'A', text: `候选路${i + 1}`, means: QUIZ_MEANS_LONG }))
+        },
+        {
+          ask: '第二题该保留',
+          options: [
+            { key: 'A', text: '熵权法定权重', means: '权重由数据算' },
+            { key: 'A', text: 'TOPSIS 比理想解', means: '要看贴近度' }
+          ]
+        },
+        { ask: '第三题应被丢掉', options: [{ key: 'A', text: '甲', means: '乙' }] }
+      ]
+    })
+  )
+  assert.equal(r.quiz.length, 2)
+  assert.equal(r.quiz[0].ask.length, 160)
+  assert.equal(r.quiz[0].options.length, 5)
+  assert.equal(r.quiz[0].options[0].means.length, 160)
+  assert.equal(r.quiz[0].multi, true)
+  assert.equal(r.quiz[1].options.map((o) => o.key).join(''), 'AB')
+})
+
+check('quiz 整题容错：缺 ask、选项少于两个都不进卡片', () => {
+  const r = H.parseCoachReply(
+    JSON.stringify({
+      next_question: '为什么？',
+      quiz: [
+        { ask: '', options: [{ key: 'A', text: '甲' }, { key: 'B', text: '乙' }] },
+        { ask: '只有一个选项', options: [{ key: 'A', text: '甲' }] },
+        { ask: 'options 不是数组', options: '熵权法' },
+        { ask: '唯一活着的一题', options: [{ key: 'A', text: '甲' }, { key: 'B', text: '乙' }] }
+      ]
+    })
+  )
+  assert.equal(r.quiz.length, 1)
+  assert.equal(r.quiz[0].ask, '唯一活着的一题')
+})
+
+check('选择题没有地方放对错：多余字段进不来，措辞里也没有判分词', () => {
+  const r = H.parseCoachReply(
+    JSON.stringify({
+      next_question: '走哪条？',
+      quiz: [
+        {
+          ask: '走哪条？',
+          options: [
+            { key: 'A', text: '熵权法', means: '权重来自数据', correct: true, score: 100, answer: '甲' },
+            { key: 'B', text: '层次分析法', means: '权重由你定', isRight: false, best: true }
+          ]
+        }
+      ]
+    })
+  )
+  const keys = new Set()
+  for (const q of r.quiz) {
+    Object.keys(q).forEach((k) => keys.add(k))
+    q.options.forEach((o) => Object.keys(o).forEach((k) => keys.add(k)))
+  }
+  assert.equal([...keys].sort().join(','), 'ask,key,means,multi,options,text')
+  assert.equal(JSON.stringify(r.quiz).includes('正确'), false)
+})
+
+check('quiz 缺失或不是数组时不污染教练卡片', () => {
+  assert.equal(H.parseCoachReply('{"next_question":"为什么？"}').quiz, undefined)
+  assert.equal(H.parseCoachReply('{"next_question":"为什么？","quiz":"先想想评价对象"}').quiz, undefined)
+})
+
+check('选项闸门：借选项塞正文的那几条丢掉，凑不满两个选项就整题丢', () => {
+  const filtered = H.filterQuizOptions([
+    {
+      ask: '这一问打算怎么定权重？',
+      multi: false,
+      options: [
+        { key: 'A', text: '让数据自己定权重（熵权法）', means: '离散度大的指标更说话' },
+        { key: 'B', text: '综上所述本文采用层次分析法', means: '判断矩阵一致性检验通过' },
+        { key: 'C', text: '先问导师要一组权重', means: '这条路不解释来源。但你要自己核对说没说通。' }
+      ]
+    },
+    {
+      ask: '只剩一个套语选项的一题',
+      multi: false,
+      options: [{ key: 'A', text: '我们建立了带时间窗的混合整数规划模型', means: '因此我们给出结论' }]
+    }
+  ])
+  assert.equal(filtered.length, 1)
+  assert.deepEqual(filtered[0].options.map((o) => o.key), ['A', 'C'])
+})
+
+check('选择题闸门：只有阶段 1/2/4 且提示还在 L0 时才允许出题', () => {
+  H.fake._reset()
+  assert.equal(H.quizAllowed(41, 1), true)
+  assert.equal(H.quizAllowed(41, 2), true)
+  assert.equal(H.quizAllowed(41, 4), true)
+  assert.equal(H.quizAllowed(41, 5), false)
+  assert.match(H.coachBriefing(41, 1), /选择题闸门=开/)
+  assert.match(H.coachBriefing(41, 5), /选择题闸门=关/)
+  H.requestHint(41, 1, 'test-model')
+  assert.equal(H.quizAllowed(41, 1), false)
+  assert.match(H.coachBriefing(41, 1), /选择题闸门=关/)
+})
+
+check('带 quiz 的教练回答照常推进：选择题不算任务卡内容', () => {
+  H.fake._reset()
+  H.applyCoachReply(
+    42,
+    1,
+    {
+      ...pass(2),
+      quiz: [
+        {
+          ask: '这一问先做什么？',
+          multi: false,
+          options: [
+            { key: 'A', text: '先复述三问的输入输出', means: '评分点里有一条叫口径明确' },
+            { key: 'B', text: '先挑评价方法', means: '方法决定后面要什么数据' }
+          ]
+        }
+      ]
+    },
+    'test-model'
+  )
+  assert.equal(st(42, 1).status, 'done')
+})
+
+check('M6-5 绘图三答进简报：没答写明欠几问，答完改成学生原话', () => {
+  H.fake._reset()
+  assert.match(H.coachBriefing(61, 6), /绘图三问还剩 3 问没答/)
+  assert.match(H.coachBriefing(61, 8), /绘图三问还剩 3 问没答/)
+  assert.doesNotMatch(H.coachBriefing(61, 3), /绘图三问/)
+  H.fake.setPlotIntent(61, 6, {
+    question: '问题 1 的结论：残存浓度随时间单调下降',
+    axes: '横轴时间 t (min)，纵轴残存浓度 c (mg/L)',
+    takeaway: '约 8 分钟后浓度基本不再下降'
+  })
+  const b = H.coachBriefing(61, 6)
+  assert.match(b, /学生的绘图三答/)
+  assert.ok(b.includes('横轴时间 t (min)'), b.slice(0, 400))
+  assert.doesNotMatch(b, /还剩/)
+})
+
+check('M6-5 三答注入 Executor：照学生写的轴名给骨架，没写的显式留空', () => {
+  const digest = H.plotDigest({ question: '问题 2 的结论：峰值出现在第 3 天', axes: '', takeaway: '读者该看出拐点' })
+  const brief = H.executorUserBrief(2, '求解实现', null, '{}', '', digest)
+  assert.ok(brief.includes('问题 2 的结论：峰值出现在第 3 天'))
+  assert.ok(brief.includes('（没填）'), '空着的那问要显式留空，不许编')
+  assert.match(brief, /留成 TODO/)
+  assert.equal(H.executorUserBrief(2, '题目理解', 'problem', 'x').includes('绘图三答'), false)
 })
 
 const failed = results.filter((r) => !r.ok)

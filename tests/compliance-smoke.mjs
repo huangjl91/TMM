@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildUsageTex, renderTurn, reportGaps, summarizeEvents, texEscape } from '../.tmp/compliance.mjs'
+import { buildUsageTex, guidanceRows, renderTurn, reportGaps, summarizeEvents, texEscape } from '../.tmp/compliance.mjs'
 
 const results = []
 function check(name, ok, detail = '') {
@@ -153,7 +153,66 @@ check('无法解析的内容原样输出', renderTurn('user', '普通一句话')
   check('空会话提示先建会话', egaps.some((g) => g.includes('先把题目贴进对话')), '')
   check('未填复核要提醒', egaps.some((g) => g.includes('第 11 阶段')), '')
   check('强制阶段未完成要提醒', egaps.some((g) => g.includes('强制阶段未完成') && g.includes('AI 使用声明')), '')
-  check('无 coach_reply 要提醒', egaps.some((g) => g.includes('没有任何教练提问记录')), '')
+  check(
+    '既没有教练提问也没有自由问答时要提醒',
+    egaps.some((g) => g.includes('没有任何教练提问或自由问答记录')),
+    ''
+  )
+  // 右侧 AI 对话框也算「交互过程」：只用了那一栏的会话不该被判成没有记录
+  const freeOnly = reportGaps({
+    ...richReport(),
+    events: [
+      {
+        at: T('19'),
+        stageId: 1,
+        action: 'free_chat',
+        level: null,
+        detail: '自由问答：熵权法怎么定权重',
+        model: 'gpt-4o-mini'
+      }
+    ]
+  })
+  check('只有自由问答时不报缺交互记录', !freeOnly.some((g) => g.includes('说明不了交互过程')), freeOnly.join(' / '))
+}
+
+/** M6 引导交互：三答、选择题、讲解都答过一遍的会话 */
+function withGuidance() {
+  const r = richReport()
+  return {
+    ...r,
+    events: [
+      ...r.events,
+      { at: T('18'), stageId: 1, action: 'intake_problem', level: null, detail: '赛题原文摘要（PDF 提取，须学生核对）：装配线…', model: '' },
+      { at: T('18'), stageId: 1, action: 'intake_data', level: null, detail: '附件1.csv：列 3 个，样本 200 行', model: '' },
+      { at: T('18'), stageId: 2, action: 'quiz_answered', level: null, detail: '选了 B：先建约束规划；理由：约束写不全就白算', model: 'deepseek-chat' },
+      { at: T('19'), stageId: 4, action: 'explain_shown', level: 2, detail: '讲解「熵权法」到第 2 层', model: '' },
+      { at: T('19'), stageId: 6, action: 'plot_intent', level: null, detail: '绘图三答：横轴时间 t (min)…', model: '' },
+      { at: T('19'), stageId: 6, action: 'plot_hint', level: null, detail: '图表规范检查报了 3 条：m65.png：dpi=100…', model: '' },
+      { at: T('20'), stageId: 6, action: 'error_hint', level: null, detail: '同类报错（NameError）连续第 2 次…', model: '' }
+    ]
+  }
+}
+
+{
+  const rows = guidanceRows(withGuidance().events, POLICY)
+  const by = Object.fromEntries(rows.map((x) => [x.action, x]))
+  check('引导表固定七行，没走过的也占一行', rows.length === 7, String(rows.length))
+  check('本地产生的引导痕迹标「未调用模型」', by.plot_hint?.count === 1 && by.plot_hint?.local === true, JSON.stringify(by.plot_hint))
+  check('选择题作答带着模型名，算经过模型', by.quiz_answered?.local === false, JSON.stringify(by.quiz_answered))
+  check('发生阶段与最近一次都取自留痕', by.plot_intent?.stages === '6' && by.explain_shown?.lastAt === T('19'), JSON.stringify(by.plot_intent))
+  const bare = guidanceRows(richReport().events, POLICY)
+  check('没有引导留痕时七行全为 0', bare.every((x) => x.count === 0 && x.stages === '—' && x.local === false), JSON.stringify(bare.filter((x) => x.count)))
+  const noLabel = guidanceRows([{ at: T('19'), stageId: 1, action: 'plot_intent', level: null, detail: '', model: '' }], { ...POLICY, actionLabels: {} })
+  check('动作缺中文标签时落到兜底', noLabel[4].label === POLICY.unknownActionLabel, noLabel[4].label)
+}
+
+{
+  const g = reportGaps(withGuidance())
+  check('答过之后引导缺口应当消失', !g.some((x) => x.includes('绘图三答') || x.includes('诊断选择题')), g.join(' / '))
+  const rich = reportGaps(richReport())
+  check('跑过代码却没答绘图三问 → 报缺口', rich.some((x) => x.includes('绘图三答')), rich.join(' / '))
+  check('要过提示却一题选择没答 → 报缺口', rich.some((x) => x.includes('诊断选择题')), rich.join(' / '))
+  check('空会话不催引导痕迹', !reportGaps(emptyReport()).some((x) => x.includes('绘图三答')), '')
 }
 
 // ---------------------------------------------------------------- 生成的 .tex
@@ -172,7 +231,19 @@ check(
 check('密钥不落进文档', !/sk-[A-Za-z0-9]/.test(tex) && tex.includes('密钥只存在本机系统钥匙串'))
 check('规定要点标注以官方原文为准', tex.includes('以官方原文为准'))
 check('钉选方法出现在用途里', tex.includes('熵权法') && tex.includes('TOPSIS'))
-check('交互过程按「未删减」口径成节', tex.includes('\\section*{六、完整交互过程}') && tex.includes('未做删减'))
+check('交互过程按「未删减」口径成节', tex.includes('\\section*{七、完整交互过程}') && tex.includes('未做删减'))
+check('引导交互单独成节且列标题齐', tex.includes('\\section*{六、引导交互明细}') && tex.includes('引导环节 & 次数 & 发生阶段 & 最近一次 & 是否经过模型'))
+check('核实声明跟着顺移到第八节', tex.includes('\\section*{八、核实声明}'))
+{
+  // A4 减 2.2cm 页边距后正文宽 16.6cm，longtable 列间距还要吃掉约 2.1cm
+  const pre = tex.match(/六、引导交互明细\}[\s\S]*?\\begin\{longtable\}\{([^\n]*)/)?.[1] ?? ''
+  const sum = [...pre.matchAll(/p\{([\d.]+)cm\}/g)].reduce((a, m) => a + Number(m[1]), 0)
+  check('引导表列宽之和不超过正文可用宽度', sum > 0 && sum <= 14.41, `${pre} → ${sum.toFixed(1)}cm`)
+  const gtex = buildUsageTex(withGuidance())
+  const row = gtex.split('\n').find((l) => l.includes('学生答绘图三问') && l.includes('& 1 & 6 &')) ?? ''
+  check('引导表按留痕逐行列出', row.includes('& 1 & 6 &') && row.includes('本机检查，未调用模型'), row.slice(0, 90))
+  check('缺口只在该缺时出现红字', tex.includes('引导环节的缺口') && !gtex.includes('引导环节的缺口'), '')
+}
 check('学生复核原文照录', tex.includes('全部重写'))
 check('师生标签按角色分', tex.includes('\\textbf{学生}') && tex.includes('\\textbf{教练提问}'), '')
 check('任务卡与示例各有独立标签', tex.includes('\\textbf{任务卡提交}') && tex.includes('示例（需自行改写核实）'), '')
@@ -226,6 +297,32 @@ for (const [name, dir] of Object.entries(dirs)) {
   const over = (two.log.match(/Overfull \\hbox \((\d+\.\d+)pt/gi) ?? []).map((s) => Number(/([\d.]+)pt/.exec(s)?.[1] ?? '0'))
   check(`${name}：没有严重超宽（表格没散）`, over.every((p) => p < 30), `最大 ${String(Math.max(0, ...over).toFixed(1))}pt`)
 }
+
+/**
+ * 留痕动作文本必须能在政策配置里查到中文标签：查不到就印成「未登记的动作」，
+ * 而《AI 工具使用详情》是要交给评委的东西。新加 logAiUsage 调用时配不上标签，这里就红。
+ */
+function tsFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? tsFiles(join(dir, e.name)) : e.name.endsWith('.ts') ? [join(dir, e.name)] : []
+  )
+}
+const logged = new Set()
+for (const f of tsFiles('src')) {
+  const text = readFileSync(f, 'utf8')
+  for (const at of text.matchAll(/logAiUsage\(/g)) {
+    const head = text.slice(at.index, at.index + 200)
+    const m = /^[^,]*,[^,]*,\s*'([a-z_]+)'/.exec(head.slice('logAiUsage('.length))
+    if (m) logged.add(m[1])
+  }
+}
+check(
+  `每个留痕动作都有 ai-policy.json 的中文标签（查到 ${logged.size} 个动作）`,
+  logged.size >= 10 && [...logged].every((a) => typeof POLICY.actionLabels[a] === 'string'),
+  [...logged]
+    .filter((a) => typeof POLICY.actionLabels[a] !== 'string')
+    .join('、') || '全部命中'
+)
 
 const failed = results.filter((r) => !r.ok)
 console.log(`\n${String(results.length - failed.length)}/${String(results.length)} 通过`)

@@ -9,6 +9,7 @@ dist/
 workspaces/
 .tmp/
 release/
+release-*/
 
 # 密钥与本地环境，永远不入库
 .env
@@ -21,6 +22,8 @@ release/
 coverage/
 *.tsbuildinfo
 *.stackdump
+# electron-vite 加载 TS 配置时落的临时文件，里面写死了本机绝对路径
+electron.vite.config.*.mjs
 
 # 图标素材：source.jpg 是从聊天工具收到的原图，含个人信息，只留本机
 resources/icon/source.jpg

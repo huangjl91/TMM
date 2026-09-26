@@ -22,6 +22,14 @@ extraResources:
     to: icon
   - from: sandbox
     to: sandbox
+  # PDF 题面提取：worker 不能进 asar（Electron 无法从 asar import() ESM），
+  # cmaps 缺了中文 PDF 抽不出字，standard_fonts 缺了部分 PDF 直接报错。三者一起带。
+  - from: node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs
+    to: pdf/pdf.worker.mjs
+  - from: node_modules/pdfjs-dist/cmaps
+    to: pdf/cmaps
+  - from: node_modules/pdfjs-dist/standard_fonts
+    to: pdf/standard_fonts
 
 # 复用 node_modules/electron/dist 里已经下好的二进制，避免构建时再去拉 electron 压缩包
 electronDist: node_modules/electron/dist

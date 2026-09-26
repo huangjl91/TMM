@@ -1,3 +1,5 @@
+import type { QuizItem } from '../../shared/agent'
+
 export interface GhostVerdict {
   suspect: boolean
   score: number
@@ -81,4 +83,17 @@ export function detectGhostwriting(text: string): GhostVerdict {
   if (/[?？]\s*$/.test(text.trim())) score -= QUESTION_RELIEF
 
   return { suspect: score >= SUSPECT_THRESHOLD, score, reasons }
+}
+
+/** 选项里的代笔腔：出现论文套语，或单个字段自己就连写成两句，就当教练想借选项塞正文 */
+function optionIsProse(text: string): boolean {
+  if (PAPER_PHRASES.some((p) => text.includes(p))) return true
+  return sentences(text).filter((s) => s.length >= 10).length >= 2
+}
+
+/** 选择题只给「路」不给「段落」：不合格的选项丢掉，整题不足两个选项就整题丢掉 */
+export function filterQuizOptions(quiz: QuizItem[]): QuizItem[] {
+  return quiz
+    .map((q) => ({ ...q, options: q.options.filter((o) => !optionIsProse(o.text) && !optionIsProse(o.means)) }))
+    .filter((q) => q.options.length >= 2)
 }

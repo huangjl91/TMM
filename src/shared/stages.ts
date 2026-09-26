@@ -3,6 +3,11 @@ export interface CardField {
   label: string
   /** 卡片上告诉学生这一格要写到什么程度 */
   hint: string
+  /**
+   * 这格要不要按题的小问各写一份。国赛题基本是 2-4 问连贯做，
+   * 选型/推导/求解/检验这四段最容易「只答了第一问」，所以它们按问分开。
+   */
+  perQuestion?: boolean
 }
 
 export interface Rubric {
@@ -93,8 +98,8 @@ export const STAGES: StageDef[] = [
     focus: '让学生自己比较候选方法并说明选择理由，教练只指出比较维度缺哪一项',
     blocking: false,
     fields: [
-      { key: 'candidates', label: '候选方法', hint: '至少两个，各写适用前提与代价' },
-      { key: 'choice', label: '选择与理由', hint: '为什么选它、放弃了什么、依据是数据的哪条特征' }
+      { key: 'candidates', label: '候选方法', hint: '至少两个，各写适用前提与代价', perQuestion: true },
+      { key: 'choice', label: '选择与理由', hint: '为什么选它、放弃了什么、依据是数据的哪条特征', perQuestion: true }
     ],
     rubric: {
       points: ['比较维度一致（精度/可解释/数据量/求解成本）', '理由落到本题数据特征', '说明适用前提'],
@@ -109,9 +114,9 @@ export const STAGES: StageDef[] = [
     focus: '核对目标函数、约束、决策变量与符号表是否自洽，量纲是否平衡',
     blocking: true,
     fields: [
-      { key: 'objective', label: '目标函数', hint: '用符号表里的符号写，逐项解释含义' },
-      { key: 'constraints', label: '约束条件', hint: '逐条约束，标明来源（题目给定/假设引入）' },
-      { key: 'domain', label: '决策变量与求解域', hint: '变量取值范围、整数性、边界' }
+      { key: 'objective', label: '目标函数', hint: '用符号表里的符号写，逐项解释含义', perQuestion: true },
+      { key: 'constraints', label: '约束条件', hint: '逐条约束，标明来源（题目给定/假设引入）', perQuestion: true },
+      { key: 'domain', label: '决策变量与求解域', hint: '变量取值范围、整数性、边界', perQuestion: true }
     ],
     rubric: {
       points: ['符号与假设表一致', '约束完整无遗漏', '量纲平衡'],
@@ -126,8 +131,8 @@ export const STAGES: StageDef[] = [
     focus: '学生自己补关键行，教练只问实现思路与结果合理性，不代写整段',
     blocking: true,
     fields: [
-      { key: 'approach', label: '求解思路', hint: '算法/库、为什么可行、预期规模与耗时' },
-      { key: 'result', label: '结果解读', hint: '最优值、耗时、结果是否合题意，异常值怎么解释' }
+      { key: 'approach', label: '求解思路', hint: '算法/库、为什么可行、预期规模与耗时', perQuestion: true },
+      { key: 'result', label: '结果解读', hint: '最优值、耗时、结果是否合题意，异常值怎么解释', perQuestion: true }
     ],
     rubric: {
       points: ['代码可复现', '结果有量纲解释', '与常识或上界做对照'],
@@ -142,9 +147,9 @@ export const STAGES: StageDef[] = [
     focus: '追问扰动幅度怎么选、结论会不会翻转，这是评分表里的稳健性项',
     blocking: true,
     fields: [
-      { key: 'design', label: '检验设计', hint: '扰动哪些参数、幅度、为什么这么取' },
-      { key: 'table', label: '扰动结果', hint: '参数-结果对照表，或图' },
-      { key: 'conclusion', label: '稳健性结论', hint: '结论在多大范围内不变，哪里会翻转' }
+      { key: 'design', label: '检验设计', hint: '扰动哪些参数、幅度、为什么这么取', perQuestion: true },
+      { key: 'table', label: '扰动结果', hint: '参数-结果对照表，或图', perQuestion: true },
+      { key: 'conclusion', label: '稳健性结论', hint: '结论在多大范围内不变，哪里会翻转', perQuestion: true }
     ],
     rubric: {
       points: ['扰动有依据', '结论随参数的变化被量化', '指出模型失效边界'],
@@ -160,7 +165,7 @@ export const STAGES: StageDef[] = [
     blocking: false,
     fields: [
       { key: 'figures', label: '图表清单', hint: '图/表编号 + 它回答哪个小问' },
-      { key: 'insight', label: '结果解释', hint: '业务含义、与直觉是否冲突、冲突怎么解释' }
+      { key: 'insight', label: '结果解释', hint: '业务含义、与直觉是否冲突、冲突怎么解释', perQuestion: true }
     ],
     rubric: {
       points: ['图表编号且被正文引用', '结论回扣问题', '有对比基准'],

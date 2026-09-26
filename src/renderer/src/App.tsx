@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChatPanel, type Msg } from './components/ChatPanel'
 import { CodePanel } from './components/CodePanel'
 import { CompliancePanel } from './components/CompliancePanel'
+import { FreeChatPanel, type FreeMsg } from './components/FreeChatPanel'
 import { PaperPanel } from './components/PaperPanel'
 import { SettingsModal } from './components/SettingsModal'
 import { StagePanel } from './components/StagePanel'
 import { TaskCard, type Injection } from './components/TaskCard'
 import { WorkspacePanel } from './components/WorkspacePanel'
+import { GuidedQuizPanel } from './components/GuidedQuizPanel'
 import {
   extractStringField,
   parseCoachReply,
@@ -16,7 +18,10 @@ import {
   type StageView
 } from '@shared/agent'
 import { STAGES } from '@shared/stages'
+import type { SessionFileView } from '@shared/intake'
+import { NO_QUESTION, type QuestionView } from '@shared/questions'
 import type { MethodCard } from '@shared/methods'
+import type { ExplainSource } from '@shared/explain'
 import type { ProviderPreset, RuntimeInfo, SessionSummary, SettingsView, StreamEvent, TokenUsage } from '@shared/types'
 
 /** Electron 的 IPC 错误带一层「Error invoking remote method」外壳，学生不需要看这层 */
@@ -45,12 +50,22 @@ export function App(): ReactNode {
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [usage, setUsage] = useState<TokenUsage | null>(null)
+  /** 右侧 AI 对话框自成一套状态：它和教练可以同时各跑一条流 */
+  const [freeMessages, setFreeMessages] = useState<FreeMsg[]>([])
+  const [freeStreaming, setFreeStreaming] = useState(false)
+  const [freeError, setFreeError] = useState<string | null>(null)
+  const [freeUsage, setFreeUsage] = useState<TokenUsage | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [stages, setStages] = useState<StageView[]>(placeholderStages)
   const [stageId, setStageId] = useState(1)
   const [card, setCard] = useState<StageCard | null>(null)
   const [injection, setInjection] = useState<Injection | null>(null)
   const [pinned, setPinned] = useState<string[]>([])
+  const [files, setFiles] = useState<SessionFileView[]>([])
+  const [intakeBusy, setIntakeBusy] = useState(false)
+  const [questions, setQuestions] = useState<QuestionView[]>([])
+  const [focus, setFocus] = useState(NO_QUESTION)
+  const [viewMode, setViewMode] = useState<'guided' | 'coach'>('guided')
 
   const sessionIdRef = useRef<number | null>(null)
   sessionIdRef.current = sessionId
@@ -59,6 +74,21 @@ export function App(): ReactNode {
   /** 流式中的教练原始 JSON：解析完成后才变成卡片 */
   const coachRawRef = useRef('')
   const streamKindRef = useRef<string>('chat')
+  /**
+   * delta / reasoning / done 这些事件本身不带 kind，得靠 start 记下这一轮是谁的。
+   * 教练走 JSON 解析分支，自由对话直接拼文本，两条流不能混着处理。
+   */
+  const activeStreamRef = useRef<'coach' | 'free'>('coach')
+
+  /**
+   * 两条流共用同一批 delta/reasoning 事件，同一时刻只能有一条在跑。
+   * 界面上按钮已经按这个禁用了，但「要提示」「提交任务卡」「导入赛题」这些入口
+   * 各自都能起一条教练流，所以这里再兜一层——静默失败比报错更难查。
+   */
+  const streamingRef = useRef(false)
+  streamingRef.current = streaming
+  const freeStreamingRef = useRef(false)
+  freeStreamingRef.current = freeStreaming
 
   const currentStage = stages.find((s) => s.id === stageId) ?? null
 
@@ -66,14 +96,19 @@ export function App(): ReactNode {
     const next = sid2 ?? (await window.api.currentStage(sid))
     stageIdRef.current = next
     setStageId(next)
-    const [list, c, pins] = await Promise.all([
+    const [list, c, pins, fs, qs] = await Promise.all([
       window.api.listStages(sid),
       window.api.stageCard(sid, next),
-      window.api.pinnedMethods(sid)
+      window.api.pinnedMethods(sid),
+      window.api.listFiles(sid),
+      window.api.questions(sid)
     ])
     setStages(list)
     setCard(c)
     setPinned(pins)
+    setFiles(fs)
+    setQuestions(qs.questions)
+    setFocus(qs.focus)
   }, [])
 
   /**
@@ -120,29 +155,53 @@ export function App(): ReactNode {
       })
     }
 
+    const patchLastFree = (patch: (m: FreeMsg) => FreeMsg): void => {
+      setFreeMessages((list) => {
+        if (list.length === 0) return list
+        const next = [...list]
+        next[next.length - 1] = patch(next[next.length - 1] as FreeMsg)
+        return next
+      })
+    }
+
     return window.api.onStream((e: StreamEvent) => {
       switch (e.type) {
         case 'start':
+          activeStreamRef.current = e.kind === 'free' ? 'free' : 'coach'
           setSessionId(e.sessionId)
-          setStreaming(true)
-          setError(null)
-          setUsage(null)
           coachRawRef.current = ''
           streamKindRef.current = e.kind
           // 首条消息才在建会话处，阶段状态得等主进程落库后才读得到
           if (sessionIdRef.current === null) void loadStage(e.sessionId)
-          setMessages((list) => [
-            ...list,
-            {
-              id: e.messageId,
-              role: 'assistant',
-              content: '',
-              streaming: true,
-              kind: e.kind
-            }
-          ])
+          if (activeStreamRef.current === 'free') {
+            setFreeStreaming(true)
+            setFreeError(null)
+            setFreeUsage(null)
+            setFreeMessages((list) => [
+              ...list,
+              { id: e.messageId, role: 'assistant', content: '', streaming: true }
+            ])
+          } else {
+            setStreaming(true)
+            setError(null)
+            setUsage(null)
+            setMessages((list) => [
+              ...list,
+              {
+                id: e.messageId,
+                role: 'assistant',
+                content: '',
+                streaming: true,
+                kind: e.kind
+              }
+            ])
+          }
           break
         case 'delta': {
+          if (activeStreamRef.current === 'free') {
+            patchLastFree((m) => ({ ...m, content: m.content + e.text }))
+            break
+          }
           coachRawRef.current += e.text
           // 教练与示例都在流 JSON：教练只露出正在生成的那个问题，示例等定稿再显示
           if (streamKindRef.current !== 'coach') break
@@ -151,7 +210,15 @@ export function App(): ReactNode {
           break
         }
         case 'reasoning':
+          if (activeStreamRef.current === 'free') {
+            patchLastFree((m) => ({ ...m, reasoning: (m.reasoning ?? '') + e.text }))
+            break
+          }
           patchLast((m) => ({ ...m, reasoning: (m.reasoning ?? '') + e.text }))
+          break
+        case 'replace':
+          // 自由对话定稿时被反代写闸门换过：把已经流出去的草稿整段覆盖掉
+          patchLastFree((m) => ({ ...m, content: e.text }))
           break
         case 'card':
           patchLast((m) => ({
@@ -173,6 +240,13 @@ export function App(): ReactNode {
           if (e.sessionId === sessionIdRef.current) void applyStageViews(e.sessionId, e.stages)
           break
         case 'done':
+          if (activeStreamRef.current === 'free') {
+            setFreeStreaming(false)
+            setFreeUsage(e.usage)
+            patchLastFree((m) => ({ ...m, streaming: false }))
+            void refreshSessions()
+            break
+          }
           setStreaming(false)
           setUsage(e.usage)
           streamKindRef.current = 'chat'
@@ -180,11 +254,22 @@ export function App(): ReactNode {
           void refreshSessions()
           break
         case 'aborted':
+          if (activeStreamRef.current === 'free') {
+            setFreeStreaming(false)
+            patchLastFree((m) => ({ ...m, streaming: false }))
+            break
+          }
           setStreaming(false)
           streamKindRef.current = 'chat'
           patchLast((m) => ({ ...m, streaming: false }))
           break
         case 'error':
+          if (activeStreamRef.current === 'free') {
+            setFreeStreaming(false)
+            setFreeError(e.message)
+            setFreeMessages((list) => list.map((m) => ({ ...m, streaming: false })))
+            break
+          }
           setStreaming(false)
           streamKindRef.current = 'chat'
           setError(e.message)
@@ -208,11 +293,12 @@ export function App(): ReactNode {
   }, [])
 
   const openSession = async (id: number): Promise<void> => {
-    const stored = await window.api.getSession(id)
+    const [stored, free] = await Promise.all([window.api.getSession(id), window.api.freeHistory(id)])
     setSessionId(id)
     setMessages(
       stored
-        .filter((m) => m.content.trim().length > 0)
+        // 自由问答属于右侧那一栏，不能混进中间的教练对话
+        .filter((m) => m.content.trim().length > 0 && m.kind !== 'free')
         .map((m): Msg => {
           const role = m.role === 'user' ? 'user' : 'assistant'
           const kind = m.kind ?? 'chat'
@@ -233,8 +319,23 @@ export function App(): ReactNode {
           }
         })
     )
+    setFreeMessages(
+      free
+        .filter((m) => m.content.trim().length > 0)
+        .map((m): FreeMsg => {
+          const role = m.role === 'user' ? 'user' : 'assistant'
+          return {
+            id: m.id,
+            role,
+            content: m.content,
+            ...(m.reasoning ? { reasoning: m.reasoning } : {})
+          }
+        })
+    )
     setError(null)
     setUsage(null)
+    setFreeError(null)
+    setFreeUsage(null)
     await loadStage(id)
   }
 
@@ -244,24 +345,67 @@ export function App(): ReactNode {
     setMessages([])
     setError(null)
     setUsage(null)
+    setFreeMessages([])
+    setFreeError(null)
+    setFreeUsage(null)
     setCard(null)
     setInjection(null)
     setStages(placeholderStages())
     setPinned([])
     stageIdRef.current = 1
     setStageId(1)
+    setFiles([])
+    setIntakeBusy(false)
+    setQuestions([])
+    setFocus(NO_QUESTION)
   }
 
   const onSend = useCallback(
-    (text: string): void => {
+    (text: string, quizLog?: string): void => {
+      if (freeStreamingRef.current) {
+        setError('右侧 AI 对话框还在回答，等它说完再发')
+        return
+      }
       setMessages((list) => [...list, { id: -Date.now(), role: 'user', content: text }])
-      window.api.send({ sessionId: sessionIdRef.current, text }).catch((e: unknown) => {
-        setStreaming(false)
-        setError(briefError(e))
-      })
+      window.api
+        .send({ sessionId: sessionIdRef.current, text, ...(quizLog ? { quizLog } : {}) })
+        .catch((e: unknown) => {
+          setStreaming(false)
+          setError(briefError(e))
+        })
     },
     [sessionIdRef]
   )
+
+  /**
+   * 右侧 AI 对话框：与教练走同一条会话，但消息落成 kind='free'，
+   * 所以历史、上下文、合规留痕都能按这同一个会话归拢，界面却互不干扰。
+   */
+  const onSendFree = useCallback((text: string): void => {
+    if (streamingRef.current) {
+      setFreeError('教练那边还在回答，等它说完再发')
+      return
+    }
+    setFreeMessages((list) => [...list, { id: -Date.now(), role: 'user', content: text }])
+    window.api.sendFree({ sessionId: sessionIdRef.current, text }).catch((e: unknown) => {
+      setFreeStreaming(false)
+      setFreeError(briefError(e))
+    })
+  }, [])
+
+  const onAbortFree = useCallback((): void => {
+    void window.api.abortFree(sessionIdRef.current)
+  }, [])
+
+  /**
+   * 讲解只走本地语料（shared/explain.ts），展开一层就记一条 explain_shown：
+   * 《AI 工具使用详情》要能说明语料给到过哪一层。没建会话时不记，避免悬空动作。
+   */
+  const onExplain = useCallback((src: ExplainSource, level: number): void => {
+    const sid = sessionIdRef.current
+    if (!sid) return
+    void window.api.explainShown({ sessionId: sid, ref: src.ref, title: src.title, kind: src.kind, level })
+  }, [sessionIdRef])
 
   const onOpenStage = useCallback(async (id: number): Promise<void> => {
     const sid = sessionIdRef.current
@@ -289,15 +433,24 @@ export function App(): ReactNode {
       setError('先把题目贴进对话建立会话，任务卡才有地方存')
       return
     }
+    if (freeStreamingRef.current) {
+      setError('右侧 AI 对话框还在回答，等它说完再提交任务卡')
+      return
+    }
     const ask = '本阶段任务卡我已经填好提交了，请对照评分点逐条检查，然后只问我一个问题。'
     try {
-      setStages(
-        await window.api.submitStage({
+      const [list, qs] = await Promise.all([
+        window.api.submitStage({
           sessionId: sid,
           stageId: stageIdRef.current,
           values
-        })
-      )
+        }),
+        // 阶段 1 的「逐问拆解」就是问题清单的来源，提交完必须重读一次
+        window.api.questions(sid)
+      ])
+      setStages(list)
+      setQuestions(qs.questions)
+      setFocus(qs.focus)
     } catch (e) {
       setError(briefError(e))
       return
@@ -313,6 +466,10 @@ export function App(): ReactNode {
     const sid = sessionIdRef.current
     if (!sid) {
       setError('先描述题目建立会话，提示要知道你在哪个阶段')
+      return
+    }
+    if (freeStreamingRef.current) {
+      setError('右侧 AI 对话框还在回答，等它说完再要提示')
       return
     }
     window.api.askHint(sid).catch((e: unknown) => {
@@ -344,6 +501,53 @@ export function App(): ReactNode {
     } catch (e) {
       setError(briefError(e))
     }
+  }, [])
+
+  /** 导入即开问：学生不用先打字，教练拿到题面清单就主动起第一个问题 */
+  const onIntake = useCallback(async (): Promise<void> => {
+    if (freeStreamingRef.current) {
+      setError('右侧 AI 对话框还在回答，等它说完再导入赛题')
+      return
+    }
+    setIntakeBusy(true)
+    setError(null)
+    try {
+      const r = await window.api.intake()
+      if (!r) return
+      setSessionId(r.sessionId)
+      sessionIdRef.current = r.sessionId
+      setMessages([])
+      setFreeMessages([])
+      setFreeError(null)
+      setFreeUsage(null)
+      setCard(null)
+      setInjection(null)
+      setUsage(null)
+      setFiles(r.files)
+      await refreshSessions()
+      await loadStage(r.sessionId, 1)
+      if (r.problemWarning) setError(r.problemWarning)
+      const text = r.problemWarning
+        ? '赛题文件已经导入，但题面文字我还需要手动补充。请先问我一个读题层面的问题。'
+        : '赛题和附件已经导入好了，请对照题面开始，一次只问我一个问题。'
+      setMessages((list) => [...list, { id: -Date.now(), role: 'user', content: text }])
+      try {
+        await window.api.send({ sessionId: r.sessionId, text })
+      } catch (sendErr) {
+        console.warn('Initial coach greeting omitted (offline or key not configured):', sendErr)
+      }
+    } catch (e) {
+      setError(briefError(e))
+    } finally {
+      setIntakeBusy(false)
+    }
+  }, [loadStage])
+
+  /** 切聚焦问题不重载任务卡：逐问的框本来就全铺开了，这里只改教练下一步围着谁问 */
+  const onFocusQuestion = useCallback(async (idx: number): Promise<void> => {
+    setFocus(idx)
+    const sid = sessionIdRef.current
+    if (sid) await window.api.setQuestion(sid, idx)
   }, [])
 
   const onPinMethod = useCallback(async (m: MethodCard, on: boolean): Promise<void> => {
@@ -381,47 +585,130 @@ export function App(): ReactNode {
       <div className="flex min-h-0 flex-1">
         <StagePanel stages={stages} currentId={stageId} onOpen={(id) => void onOpenStage(id)} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <ChatPanel
-            messages={messages}
-            streaming={streaming}
-            error={error}
-            usage={usage}
-            hintLevel={hintLevel}
-            onSend={onSend}
-            onAbort={() => window.api.abort(sessionIdRef.current)}
-            onAskHint={onAskHint}
-            onAdopt={(s, mid) => void onAdopt(s, mid)}
-            onNewSession={newSession}
-          />
-          <TaskCard
-            stage={currentStage}
-            card={card}
-            streaming={streaming}
-            injection={injection}
-            onSubmit={(values) => void onSubmitCard(values)}
-          />
-          <CodePanel
-            sessionId={sessionId}
-            injection={injection}
-            onAdoptSession={(id) => {
-              if (sessionIdRef.current !== null) return
-              setSessionId(id)
-              void loadStage(id)
-            }}
-          />
-          <PaperPanel sessionId={sessionId} />
-          <CompliancePanel sessionId={sessionId} stageId={stageId} />
+          {/* 顶栏视图切换：引导式做题中心 vs 自由探究教练对话 */}
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#12141a] px-4 py-1.5">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setViewMode('guided')}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+                  viewMode === 'guided'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <span>🎯</span>
+                <span>引导式做题（简单到难 · 问AI · 绘图与结论）</span>
+              </button>
+              <button
+                onClick={() => setViewMode('coach')}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+                  viewMode === 'coach'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <span>💬</span>
+                <span>自由探究（伴跑教练对话与任务卡）</span>
+              </button>
+            </div>
+            {viewMode === 'guided' ? (
+              <span className="text-[11px] text-white/40">
+                答完选择题自动生成数学模型与可视化方案
+              </span>
+            ) : null}
+          </div>
+
+          {viewMode === 'guided' ? (
+            <div className="flex-1 overflow-hidden">
+              <GuidedQuizPanel
+                sessionId={sessionId}
+                questions={questions}
+                files={files}
+                activeQuestionIdx={focus > 0 ? focus : 1}
+                onSelectQuestion={(idx) => {
+                  void onFocusQuestion(idx)
+                }}
+                onIntake={() => void onIntake()}
+                intakeBusy={intakeBusy}
+                onSendToSandbox={(code) => {
+                  setInjection({
+                    target: 'code',
+                    content: code,
+                    seq: Date.now()
+                  })
+                }}
+              />
+            </div>
+          ) : (
+            <>
+              <ChatPanel
+                messages={messages}
+                streaming={streaming}
+                error={error}
+                usage={usage}
+                hintLevel={hintLevel}
+                intakeBusy={intakeBusy}
+                busyElsewhere={freeStreaming}
+                onSend={onSend}
+                onExplain={onExplain}
+                onAbort={() => window.api.abort(sessionIdRef.current)}
+                onAskHint={onAskHint}
+                onAdopt={(s, mid) => void onAdopt(s, mid)}
+                onNewSession={newSession}
+                onIntake={() => void onIntake()}
+              />
+              <TaskCard
+                stage={currentStage}
+                card={card}
+                streaming={streaming}
+                injection={injection}
+                questions={questions}
+                focus={focus}
+                onFocus={(idx) => void onFocusQuestion(idx)}
+                onSubmit={(values) => void onSubmitCard(values)}
+              />
+              <CodePanel
+                sessionId={sessionId}
+                stageId={stageId}
+                onSend={onSend}
+                injection={injection}
+                onAdoptSession={(id) => {
+                  if (sessionIdRef.current !== null) return
+                  setSessionId(id)
+                  void loadStage(id)
+                }}
+              />
+              <PaperPanel sessionId={sessionId} />
+              <CompliancePanel sessionId={sessionId} stageId={stageId} />
+            </>
+          )}
         </div>
-        <WorkspacePanel
-          sessions={sessions}
-          activeId={sessionId}
-          stageId={stageId}
-          runtime={runtime}
-          pinned={pinned}
-          onSelect={(id) => void openSession(id)}
-          onNew={newSession}
-          onPin={(m, on) => void onPinMethod(m, on)}
-        />
+        {/* 右栏：上方是随时可用的 AI 对话框，下方工作区默认收起，不跟对话抢地方 */}
+        <aside className="flex w-[26rem] shrink-0 flex-col border-l border-white/10 bg-[#12141a]">
+          <FreeChatPanel
+            messages={freeMessages}
+            streaming={freeStreaming}
+            error={freeError}
+            usage={freeUsage}
+            hasApiKey={settings?.hasApiKey === true}
+            busyElsewhere={streaming}
+            onSend={onSendFree}
+            onAbort={onAbortFree}
+            onOpenSettings={() => setShowSettings(true)}
+          />
+          <WorkspacePanel
+            sessions={sessions}
+            activeId={sessionId}
+            stageId={stageId}
+            runtime={runtime}
+            pinned={pinned}
+            files={files}
+            onSelect={(id) => void openSession(id)}
+            onNew={newSession}
+            onPin={(m, on) => void onPinMethod(m, on)}
+            onExplain={onExplain}
+          />
+        </aside>
       </div>
 
       {showSettings && settings ? (

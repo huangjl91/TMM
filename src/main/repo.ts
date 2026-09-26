@@ -2,6 +2,7 @@ import { getDb } from './db'
 import type { RunAttempt } from './sandbox'
 import type { ArtifactInfo, RunRecord, SandboxLimits } from '../shared/sandbox'
 import type { MessageKind, StageStatus, UsageRow } from '../shared/agent'
+import type { PlotAnswers } from '../shared/plots'
 import type { ActiveSettings, ChatRole, SessionSummary, StoredMessage } from '../shared/types'
 
 const DEFAULT_SETTINGS: ActiveSettings = {
@@ -106,6 +107,14 @@ export function getSessionMessages(sessionId: number): StoredMessage[] {
         createdAt: Number(row.created_at)
       }
     })
+}
+
+/**
+ * 右侧 AI 对话框的历史。它和教练对话共用 messages 表，靠 kind 分流：
+ * 教练那边喂历史时必须滤掉 free，否则自由问答会串进阶段的 rubric 上下文。
+ */
+export function getFreeMessages(sessionId: number): StoredMessage[] {
+  return getSessionMessages(sessionId).filter((m) => m.kind === 'free')
 }
 
 const RUN_COLS =
@@ -250,6 +259,49 @@ export function getSessionStageKey(sessionId: number): string | null {
   return row?.stage_key ?? null
 }
 
+/** 逐问轴上学生当前盯着第几问；0 表示不区分（还没拆出多问） */
+export function getSessionQuestion(sessionId: number): number {
+  const row = getDb().prepare('SELECT question_idx FROM sessions WHERE id = ?').get(sessionId) as
+    { question_idx: bigint | number | null } | undefined
+  return Number(row?.question_idx ?? 0) || 0
+}
+
+export function setSessionQuestion(sessionId: number, idx: number): void {
+  const n = Number.isInteger(idx) && (idx as number) >= 1 && (idx as number) <= 12 ? (idx as number) : 0
+  getDb().prepare('UPDATE sessions SET question_idx = ?, updated_at = ? WHERE id = ?').run(n, Date.now(), sessionId)
+}
+
+/**
+ * 绘图三问按阶段各存一份：阶段 6 求解与阶段 8 图表要画的图不是一回事。
+ * Executor 的代码骨架要照着学生自己写的这三答给，不能替他改主意。
+ */
+export function getPlotIntent(sessionId: number, stageId: number): PlotAnswers | null {
+  const row = getDb()
+    .prepare('SELECT question, axes, takeaway FROM plot_intents WHERE session_id = ? AND stage_id = ?')
+    .get(sessionId, stageId) as { question: string; axes: string; takeaway: string } | undefined
+  if (!row) return null
+  return { question: String(row.question ?? ''), axes: String(row.axes ?? ''), takeaway: String(row.takeaway ?? '') }
+}
+
+export function setPlotIntent(sessionId: number, stageId: number, answers: PlotAnswers): void {
+  const now = Date.now()
+  getDb()
+    .prepare(
+      `INSERT INTO plot_intents(session_id, stage_id, question, axes, takeaway, updated_at) VALUES(?,?,?,?,?,?)
+       ON CONFLICT(session_id, stage_id) DO UPDATE SET
+         question = excluded.question, axes = excluded.axes, takeaway = excluded.takeaway, updated_at = excluded.updated_at`
+    )
+    .run(
+      sessionId,
+      stageId,
+      (answers.question ?? '').trim().slice(0, 400),
+      (answers.axes ?? '').trim().slice(0, 400),
+      (answers.takeaway ?? '').trim().slice(0, 400),
+      now
+    )
+  touchSession(sessionId)
+}
+
 /** 任务卡按字段逐条追加，历史版本留着——合规导出要能看出学生改了几轮 */
 export function saveStageOutputs(sessionId: number, stageId: number, values: Record<string, string>): void {
   const ins = getDb().prepare(
@@ -384,4 +436,150 @@ export function countRuns(sessionId: number): number {
 
 export function countPaperVersions(sessionId: number): number {
   return countOf('SELECT COUNT(*) AS n FROM paper_versions WHERE session_id = ?', sessionId)
+}
+
+/** 导入的赛题与附件：digest 是提取摘要，不是文件内容 */
+export function addSessionFile(
+  sessionId: number,
+  kind: 'problem' | 'data',
+  name: string,
+  relPath: string,
+  size: number,
+  digestKind: string,
+  digest: string
+): number {
+  const r = getDb()
+    .prepare(
+      `INSERT INTO session_files(session_id, kind, name, rel_path, size, digest_kind, digest, created_at)
+       VALUES(?,?,?,?,?,?,?,?)`
+    )
+    .run(sessionId, kind, name.slice(0, 160), relPath.slice(0, 300), size, digestKind, digest.slice(0, 20_000), Date.now())
+  touchSession(sessionId)
+  return Number(r.lastInsertRowid)
+}
+
+export function listSessionFiles(sessionId: number): {
+  id: number
+  kind: 'problem' | 'data'
+  name: string
+  relPath: string
+  size: number
+  digestKind: 'text' | 'pdf' | 'csv' | 'binary'
+  digest: string
+  needsVerify: boolean
+  createdAt: number
+}[] {
+  const rows = getDb()
+    .prepare(
+      'SELECT id, kind, name, rel_path, size, digest_kind, digest, created_at FROM session_files WHERE session_id = ? ORDER BY kind, id'
+    )
+    .all(sessionId) as unknown as Record<string, bigint | number | string>[]
+  return rows.map((r) => ({
+    id: Number(r.id),
+    kind: String(r.kind) === 'problem' ? ('problem' as const) : ('data' as const),
+    name: String(r.name),
+    relPath: String(r.rel_path),
+    size: Number(r.size),
+    digestKind: String(r.digest_kind) as 'text' | 'pdf' | 'csv' | 'binary',
+    digest: String(r.digest),
+    needsVerify: String(r.digest_kind) === 'pdf',
+    createdAt: Number(r.created_at)
+  }))
+}
+
+export function countSessionFiles(sessionId: number): number {
+  return countOf('SELECT COUNT(*) AS n FROM session_files WHERE session_id = ?', sessionId)
+}
+
+export function getGuidedChoices(
+  sessionId: number,
+  questionIdx: number
+): Partial<Record<string, { pickedKey: string; pickedText: string; pickedMeans: string; userNote?: string; timestamp: number }>> {
+  const rows = getDb()
+    .prepare(
+      'SELECT step, picked_key, picked_text, picked_means, user_note, updated_at FROM guided_choices WHERE session_id = ? AND question_idx = ?'
+    )
+    .all(sessionId, questionIdx) as unknown as Record<string, bigint | number | string>[]
+  const out: Record<string, { pickedKey: string; pickedText: string; pickedMeans: string; userNote?: string; timestamp: number }> = {}
+  for (const r of rows) {
+    out[String(r.step)] = {
+      pickedKey: String(r.picked_key),
+      pickedText: String(r.picked_text),
+      pickedMeans: String(r.picked_means),
+      userNote: String(r.user_note ?? ''),
+      timestamp: Number(r.updated_at)
+    }
+  }
+  return out
+}
+
+export function saveGuidedChoice(
+  sessionId: number,
+  questionIdx: number,
+  step: string,
+  pickedKey: string,
+  pickedText: string,
+  pickedMeans: string,
+  userNote = ''
+): void {
+  const now = Date.now()
+  getDb()
+    .prepare(
+      `INSERT INTO guided_choices(session_id, question_idx, step, picked_key, picked_text, picked_means, user_note, updated_at)
+       VALUES(?,?,?,?,?,?,?,?)
+       ON CONFLICT(session_id, question_idx, step) DO UPDATE SET
+         picked_key = excluded.picked_key,
+         picked_text = excluded.picked_text,
+         picked_means = excluded.picked_means,
+         user_note = excluded.user_note,
+         updated_at = excluded.updated_at`
+    )
+    .run(sessionId, questionIdx, step, pickedKey, pickedText, pickedMeans, userNote, now)
+  touchSession(sessionId)
+}
+
+export interface StoredGuidedAnalysis {
+  knowledgeJson: string
+  questionsJson: string
+  elementsJson: string
+  updatedAt: number
+}
+
+export function getGuidedAnalysis(sessionId: number, questionIdx: number): StoredGuidedAnalysis | null {
+  const row = getDb()
+    .prepare(
+      'SELECT knowledge_json, questions_json, elements_json, updated_at FROM guided_analyses WHERE session_id = ? AND question_idx = ?'
+    )
+    .get(sessionId, questionIdx) as
+    | { knowledge_json: string; questions_json: string; elements_json: string; updated_at: bigint | number }
+    | undefined
+  if (!row) return null
+  return {
+    knowledgeJson: String(row.knowledge_json),
+    questionsJson: String(row.questions_json),
+    elementsJson: String(row.elements_json),
+    updatedAt: Number(row.updated_at)
+  }
+}
+
+export function saveGuidedAnalysis(
+  sessionId: number,
+  questionIdx: number,
+  knowledgeJson: string,
+  questionsJson: string,
+  elementsJson: string
+): void {
+  const now = Date.now()
+  getDb()
+    .prepare(
+      `INSERT INTO guided_analyses(session_id, question_idx, knowledge_json, questions_json, elements_json, updated_at)
+       VALUES(?,?,?,?,?,?)
+       ON CONFLICT(session_id, question_idx) DO UPDATE SET
+         knowledge_json = excluded.knowledge_json,
+         questions_json = excluded.questions_json,
+         elements_json = excluded.elements_json,
+         updated_at = excluded.updated_at`
+    )
+    .run(sessionId, questionIdx, knowledgeJson, questionsJson, elementsJson, now)
+  touchSession(sessionId)
 }

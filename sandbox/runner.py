@@ -16,6 +16,7 @@ import contextlib
 import io
 import json
 import os
+import struct
 import sys
 import tempfile
 import time
@@ -206,6 +207,83 @@ def snapshot_files(root):
     return found
 
 
+# savefig 落地那一刻抄下的客观信息：文件名 -> {dpi, figWidth, figHeight, axes}
+PLOT_META = {}
+
+
+def png_pixels(path):
+    """读 PNG 文件头的宽高：轴名靠 savefig 探针，像素尺寸靠文件本身。"""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(24)
+        if len(head) < 24 or head[:8] != b'\x89PNG\r\n\x1a\n':
+            return None
+        return list(struct.unpack('>II', head[16:24]))
+    except Exception:  # noqa: BLE001 - 读不出就少这一项
+        return None
+
+
+def _plot_target(args, kw):
+    fname = kw.get('fname') if kw else None
+    if fname is None and args:
+        fname = args[0]
+    if not isinstance(fname, (str, os.PathLike)):
+        return None
+    return os.path.basename(os.fspath(fname)).replace(os.sep, '/')
+
+
+def _plot_axes(fig):
+    axes = []
+    for ax in fig.axes:
+        try:
+            axes.append({
+                'xlabel': (ax.get_xlabel() or '').strip(),
+                'ylabel': (ax.get_ylabel() or '').strip(),
+                'title': (ax.get_title() or '').strip(),
+                'legend': ax.get_legend() is not None,
+                'curves': len(ax.lines) + len(ax.collections),
+            })
+        except Exception:  # noqa: BLE001 - 少读一个坐标系不影响出图
+            continue
+    return axes
+
+
+def install_savefig_probe():
+    """给 Figure.savefig 包一层，记下这张图的轴名/图例/曲线数/dpi。
+
+    只观察不改行为：图表规范检查要有客观依据，不能靠看图猜，也不判美丑。
+    """
+    try:
+        from matplotlib.figure import Figure
+    except Exception:  # noqa: BLE001 - 没用到 matplotlib 就没这回事
+        return
+    if getattr(Figure, '_mt_plot_probe', False):
+        return
+    original = Figure.savefig
+
+    def savefig(self, *args, **kw):
+        name = _plot_target(args, kw)
+        meta = None
+        try:
+            dpi = kw.get('dpi') or self.get_dpi()
+            width, height = self.get_size_inches()
+            meta = {
+                'dpi': int(dpi),
+                'figWidth': round(float(width), 2),
+                'figHeight': round(float(height), 2),
+                'axes': _plot_axes(self),
+            }
+        except Exception:  # noqa: BLE001
+            meta = None
+        result = original(self, *args, **kw)
+        if name and meta:
+            PLOT_META[name] = meta
+        return result
+
+    Figure.savefig = savefig
+    Figure._mt_plot_probe = True
+
+
 def collect_artifacts(root, before, started):
     out = []
     after = snapshot_files(root)
@@ -220,9 +298,16 @@ def collect_artifacts(root, before, started):
         item = {'name': rel, 'ext': ext, 'size': size, 'inline': False}
         if ext in ('.png', '.jpg') and size <= MAX_ARTIFACT_BYTES and len(out) < MAX_ARTIFACTS:
             with open(full, 'rb') as f:
+                raw = f.read()
                 mime = 'image/png' if ext == '.png' else 'image/jpeg'
-                item['dataUrl'] = 'data:%s;base64,%s' % (mime, base64.b64encode(f.read()).decode())
+                item['dataUrl'] = 'data:%s;base64,%s' % (mime, base64.b64encode(raw).decode())
             item['inline'] = True
+        meta = PLOT_META.get(os.path.basename(rel))
+        if meta:
+            item['plotMeta'] = meta
+        px = png_pixels(full) if ext == '.png' else None
+        if px:
+            item['px'] = px
         out.append(item)
     return sorted(out, key=lambda a: a['name'])
 
@@ -251,6 +336,10 @@ def run(code, workspace):
         try:
             configure_matplotlib()
         except Exception:  # noqa: BLE001 - 字体配置失败不该阻断计算
+            pass
+        try:
+            install_savefig_probe()
+        except Exception:  # noqa: BLE001 - 探针装不上就少一份规范依据，不影响运行
             pass
     ns = {'__name__': '__main__', '__doc__': None}
     exec(compile(code, 'main.py', 'exec'), ns)

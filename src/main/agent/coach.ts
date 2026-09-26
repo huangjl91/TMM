@@ -4,6 +4,7 @@ import {
   appendMessage,
   createSession,
   finalizeMessage,
+  getPlotIntent,
   getSessionMessages,
   latestStageOutputs,
   loadSettings,
@@ -21,16 +22,17 @@ import {
   coachUserBrief,
   executorUserBrief
 } from './prompts'
-import { detectGhostwriting } from './anti-ghostwrite'
+import { detectGhostwriting, filterQuizOptions } from './anti-ghostwrite'
 import { parseCoachReply, parseScaffold, sliceJsonObject, type AdoptPayload, type CoachReply } from '../../shared/agent'
 import { HINT_LEVELS, STAGES } from '../../shared/stages'
+import { plotDigest, plotGate } from '../../shared/plots'
 import { IPC, type SendPayload, type StoredMessage, type StreamEvent } from '../../shared/types'
 
 const controllers = new Map<number, AbortController>()
 /** 历史别无限喂，长会话会把 token 吃光 */
 const HISTORY_LIMIT = 24
 
-function broadcast(event: StreamEvent): void {
+export function broadcast(event: StreamEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send(IPC.ChatStream, event)
   }
@@ -40,7 +42,7 @@ function broadcastStages(sessionId: number): void {
   broadcast({ type: 'stages', sessionId, stages: stageViews(sessionId) })
 }
 
-function keyOrFail(): {
+export function keyOrFail(): {
   baseUrl: string
   apiKey: string
   model: string
@@ -64,17 +66,25 @@ function renderForHistory(m: StoredMessage): string {
   const reply = parseCoachReply(m.content)
   if (!reply) return m.content
   const checks = reply.checks.map((c) => `${c.passed ? '✓' : '✗'} ${c.item}${c.note ? `（${c.note}）` : ''}`)
+  const quiz = (reply.quiz ?? []).map(
+    (q) => `选择题：${q.ask}（${q.options.map((o) => `${o.key}. ${o.text}`).join('；')}）`
+  )
   return [
     `问题：${reply.next_question}`,
     checks.length ? `检查点：\n${checks.join('\n')}` : '',
     reply.hint ? `提示 L${reply.hint.level}：${reply.hint.text}` : '',
+    ...quiz,
     reply.blockers ? `还缺：${reply.blockers}` : ''
   ]
     .filter(Boolean)
     .join('\n')
 }
 
-async function judgeViolation(endpoint: ReturnType<typeof keyOrFail>, model: string, text: string): Promise<boolean> {
+export async function judgeViolation(
+  endpoint: ReturnType<typeof keyOrFail>,
+  model: string,
+  text: string
+): Promise<boolean> {
   try {
     const raw = await completeText({
       ...endpoint,
@@ -102,7 +112,9 @@ function sanitize(reply: CoachReply): CoachReply {
     next_question: failed
       ? `上面这几条里，「${failed.item}」你还没答上。先只回答这一条：你现在的做法依据是什么？`
       : '你这段产出里，哪一句是你自己能核对的？先只说那一句。',
-    hint: null
+    // 这一轮已被判越界，提示与选项一并撤掉：留下的只能是一句提问
+    hint: null,
+    quiz: undefined
   }
 }
 
@@ -164,6 +176,8 @@ async function coachTurn(o: TurnOpts): Promise<void> {
 
   if (o.userText) appendMessage(o.sessionId, 'user', o.userText, 'chat')
   const history: ChatMsg[] = getSessionMessages(o.sessionId)
+    // 右侧自由问答不进教练上下文：它没有阶段归属，混进来会让 rubric 反馈跑偏
+    .filter((m) => m.kind !== 'free')
     .slice(-HISTORY_LIMIT)
     .filter((m) => m.content.trim())
     .map((m) => ({ role: m.role, content: renderForHistory(m) }))
@@ -207,6 +221,8 @@ async function coachTurn(o: TurnOpts): Promise<void> {
       broadcast({ type: 'done', usage: r.usage })
       return
     }
+    // 选择题只给「路」不给「段落」：写成论文的选项在这一步就被摘掉，进不了卡片也进不了历史
+    if (parsed.quiz) parsed.quiz = filterQuizOptions(parsed.quiz)
     const reply = await enforceCoach(parsed, messages, endpoint, o)
     finalizeMessage(messageId, JSON.stringify(reply), reasoning || null, r.usage)
     broadcast({ type: 'card', card: reply })
@@ -222,8 +238,11 @@ async function coachTurn(o: TurnOpts): Promise<void> {
         `检查点 ${reply.checks.filter((c) => c.passed).length}/${reply.checks.length}`,
         hints.cards.length
           ? `参考方法卡（${hints.pinned ? '学生钉选' : '按任务卡自动匹配'}）：${hints.cards.map((c) => c.name).join('、')}`
-          : '未参考方法卡'
-      ].join('；'),
+          : '未参考方法卡',
+        reply.quiz?.length ? `出了 ${reply.quiz.length} 道诊断选择题` : ''
+      ]
+        .filter(Boolean)
+        .join('；'),
       reply.hint?.level ?? null,
       endpoint.model
     )
@@ -236,9 +255,22 @@ async function coachTurn(o: TurnOpts): Promise<void> {
     controllers.delete(o.sessionId)
   }
 }
-/** L2/L3 才走到这里：示例由 Executor 产出，落地必须学生点「采纳」 */
+/**
+ * L2/L3 才走到这里：示例由 Executor 产出，落地必须学生点「采纳」。
+ * 阶段 6/8 先卡绘图三问——没答完就不发请求，因为骨架会照着「随便画个图」生成，
+ * 那等于替学生跳过了科研绘图里唯一需要他思考的那一步。
+ */
 async function scaffoldTurn(sessionId: number, stageId: number, level: number, endpoint: Endpoint): Promise<void> {
   const def = STAGES.find((s) => s.id === stageId)
+  const intent = getPlotIntent(sessionId, stageId)
+  const missing = plotGate(intent, '', stageId)
+  if (missing.length) {
+    broadcast({
+      type: 'error',
+      message: `这次没有向 AI 要骨架：${def?.title ?? '本阶段'}要先在右侧 Python 面板答完绘图三问，还剩 ${String(missing.length)} 问没答。答完的骨架才会照你写的轴名与单位来。`
+    })
+    return
+  }
   const outputs = latestStageOutputs(sessionId, stageId)
   const emptyField = def?.fields.find((f) => !outputs[f.key])?.key ?? def?.fields[0]?.key ?? null
   const messageId = appendMessage(sessionId, 'assistant', '', 'scaffold')
@@ -259,7 +291,8 @@ async function scaffoldTurn(sessionId: number, stageId: number, level: number, e
             def?.title ?? '',
             emptyField,
             JSON.stringify(outputs),
-            methodHints(sessionId, stageId).digest
+            methodHints(sessionId, stageId).digest,
+            intent ? plotDigest(intent) : ''
           )
         }
       ]
@@ -299,6 +332,10 @@ export async function send(payload: SendPayload): Promise<void> {
     renameSession(sessionId, text)
   }
   const id = sessionId as number
+  /** 选择题作答是学生在做判断，不是 AI 产出，但它是《AI 工具使用详情》里最能说明「谁在做决定」的一条 */
+  if (payload.quizLog?.trim()) {
+    logAiUsage(id, currentStageId(id), 'quiz_answered', payload.quizLog.trim().slice(0, 600), null, loadSettings().model)
+  }
   await coachTurn({
     sessionId: id,
     stageId: currentStageId(id),

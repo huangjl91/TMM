@@ -3,6 +3,8 @@
  * 真 repo 依赖 electron 的 userData 路径与 safeStorage，不能在裸 node 里跑。
  */
 import type { StageStatus } from '../src/shared/agent'
+import type { SessionFileView } from '../src/shared/intake'
+import type { PlotAnswers } from '../src/shared/plots'
 
 export interface StageRow {
   stageId: number
@@ -25,6 +27,9 @@ const states = new Map<number, Map<number, StageRow>>()
 const outputs = new Map<string, Record<string, string>>()
 const stageKeys = new Map<number, string>()
 const pins = new Map<number, string[]>()
+const files = new Map<number, SessionFileView[]>()
+const focus = new Map<number, number>()
+const plots = new Map<string, PlotAnswers>()
 const usage: UsageRow[] = []
 
 function mapFor(sessionId: number): Map<number, StageRow> {
@@ -79,6 +84,20 @@ export function latestStageOutputs(sessionId: number, stageId: number): Record<s
   return { ...(outputs.get(`${sessionId}:${stageId}`) ?? {}) }
 }
 
+/** 真 repo 从 session_files 读导入的题面，教练 briefing 要把它转述给学生 */
+export function listSessionFiles(sessionId: number): SessionFileView[] {
+  return [...(files.get(sessionId) ?? [])]
+}
+
+/** 逐问焦点：真 repo 存在 sessions.question_idx 上 */
+export function getSessionQuestion(sessionId: number): number {
+  return focus.get(sessionId) ?? 0
+}
+
+export function setSessionQuestion(sessionId: number, idx: number): void {
+  focus.set(sessionId, Number.isInteger(idx) && idx >= 1 && idx <= 12 ? idx : 0)
+}
+
 export function logAiUsage(
   sessionId: number,
   stageId: number | null,
@@ -88,6 +107,15 @@ export function logAiUsage(
   model = ''
 ): void {
   usage.push({ sessionId, stageId, action, level, detail, model })
+}
+
+/** 真 repo 存在 plot_intents 表：阶段 6/8 的绘图三答 */
+export function getPlotIntent(sessionId: number, stageId: number): PlotAnswers | null {
+  return plots.get(`${sessionId}:${stageId}`) ?? null
+}
+
+export function setPlotIntent(sessionId: number, stageId: number, answers: PlotAnswers): void {
+  plots.set(`${sessionId}:${stageId}`, { ...answers })
 }
 
 export function _usage(): UsageRow[] {
@@ -102,10 +130,17 @@ export function _pin(sessionId: number, methodIds: string[]): void {
   pins.set(sessionId, [...methodIds])
 }
 
+export function _setFiles(sessionId: number, list: SessionFileView[]): void {
+  files.set(sessionId, [...list])
+}
+
 export function _reset(): void {
   states.clear()
   outputs.clear()
+  plots.clear()
   stageKeys.clear()
   pins.clear()
+  files.clear()
+  focus.clear()
   usage.length = 0
 }

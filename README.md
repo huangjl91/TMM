@@ -19,11 +19,16 @@
 | --- | --- |
 | 十一阶段状态机 | 读题拆解 → 数据探索 → 假设与符号 → 模型选型 → 模型推导 → 求解实现 → 灵敏度与稳健性检验 → 结果分析与图表 → 摘要训练 → 全文组装与编译 → AI 使用详情导出。每阶段有任务卡字段、评分点、历年常见失分项；关键阶段 `blocking`，没通过检查点不许推进 |
 | 教练对话 | 按当前阶段的任务卡 + 已钉方法卡生成追问，只能围绕该阶段的 rubric 反馈 |
+| 右侧 AI 对话框 | 配好 API Key 后可以直接提问的通用问答栏：解释概念、比较方法、看报错、捋思路。它不走阶段 rubric，这是它与教练的区别；相同的是同样过反代写闸门（成稿会被拦下并整段替换）与合规留痕。栏位上方是对话，下方工作区（会话 / 附件 / 方法库 / 运行环境）默认收起 |
+| 赛题导入 | 贴文本或选 PDF/Excel 附件，主进程用 pdfjs 抽正文文本、按「问题一/二」切分；界面标注抽取结果须自行核对。每问一条引导轴，逐问记「题意复述 / 需要回答什么 / 用到的数据 / 方法候选」 |
+| 诊断选择题 | 读题、数据、方法三个阶段在你要提示之前先出选择题（本地题库为主，不判对错、不计分），答完才接着往下走；答案与理由作为教练上下文 |
+| 分级讲解 | 「这一步到底是什么意思」按 L1 一句话 → L2 打比方 → L3 放进建模流程 → L4 常见误区展开，全部是本仓库手写的中文语料，不依赖模型 |
+| 科研绘图引导 | 阶段 6/8 要图必须先答完「横纵轴与单位 / 想说明什么 / 数据来源」三问；出图后按图元规范检查（单位、图例、字号、dpi）给可执行提示，运行报错按同类连错次数分级导读 |
 | 分级提示 | L0 提问 / L1 方向性提示 / L2 半成品脚手架 / L3 完整示例；同一阶段连续 3 次没过检查点自动升一级，每次给了哪一级都写进合规日志 |
 | 方法卡库 | 26 张建模方法卡（规划、评价、预测、图与网络、机器学习等），只有要点与建模思路骨架，没有成稿正文；可钉选注入教练上下文，未钉选时按任务卡文本自动检索 |
 | Python 沙箱 | 主进程起子进程跑学生代码，`sandbox/runner.py` 用 audit hook + Windows Job Object 限制联网、文件写入范围与超时，出图直接回流到工作区面板 |
 | 论文排版 | 国赛中文 LaTeX 模板（`resources/latex/cumcm.tex`），主进程调 `xelatex` 两遍编译，解析 `.log` 定位到具体行列，PDF 在应用内预览 |
-| 合规导出 | 汇总全部留痕生成 `ai-usage.tex` 并编译为 **《AI 工具使用详情.pdf》**，含使用的模型、每一级提示的发放记录、完整交互过程 |
+| 合规导出 | 汇总全部留痕生成 `ai-usage.tex` 并编译为 **《AI 工具使用详情.pdf》**，含使用的模型、每一级提示的发放记录、引导交互明细（导入、逐问、选择题、讲解、绘图三问与图表提示各多少次）、完整交互过程 |
 
 ## 运行环境
 
@@ -67,7 +72,7 @@ npm run dist      # electron-builder，产物在 release/
 - `release/math-modeling-tutor-portable-<版本>.exe` —— 免安装，双击就开，适合直接发给队友看效果
 - `release/win-unpacked/` —— 解包目录，验证外部依赖缺失时的提示文案最方便
 
-安装包与 dev 共用同一份用户数据目录（`%APPDATA%\math-modeling-tutor`），应用启用了单实例锁：**dev 还开着的时候，双击安装包会直接退出且不报错**，先退干净再开。
+安装包与 dev 共用同一份用户数据目录（`%APPDATA%\math-modeling-tutor`），应用启用了单实例锁：**dev 还开着的时候，双击安装包会直接退出且不报错**（反之也一样），先退干净再开。要两边并存（例如拿 dev 做回归、同时自己还开着安装包），给其中一方单独指一个数据目录，命令行末尾加 `-- --user-data-dir="$PWD/.tmp/devuser"`（exe 直接 `--user-data-dir=...`）。
 
 ## 命令一览
 
@@ -81,17 +86,21 @@ npm run dist      # electron-builder，产物在 release/
 | `npm run smoke:agent` | 状态机 / 教练上下文 / 反代写 / 提示升级，打假 LLM | 不需要 |
 | `npm run smoke:latex` | `.log` 解析与 LaTeX 片段生成 | 需要本机有 `xelatex` |
 | `npm run smoke:methods` | 方法卡检索打分 | 不需要 |
-| `npm run smoke:compliance` | 详情文档生成器纯函数 | 不需要 |
+| `npm run smoke:compliance` | 详情文档生成器纯函数（含引导交互明细一节） | 不需要 |
 | `npm run smoke:sandbox` | 沙箱限制用例 | 需要 Python 3.12 |
-| `npm run smoke:ui[:stage\|paper\|methods\|compliance]` | CDP 驱动真实窗口的端到端探针 | 需要按下述方式起 dev |
+| `npm run smoke:intake` | 赛题/附件导入与 PDF 文本提取 | 不需要 |
+| `npm run smoke:questions` | 逐问拆解的字段前缀与进度纯函数 | 不需要 |
+| `npm run smoke:explain` | 本地分级讲解语料 | 不需要 |
+| `npm run smoke:plots` | 绘图三问闸门、图表规范检查、报错导读分级 | 不需要 |
+| `npm run smoke:ui[:stage\|paper\|methods\|compliance\|questions\|quiz\|plot]` | CDP 驱动真实窗口的端到端探针 | 需要按下述方式起 dev |
 
 UI 探针需要一个开着 CDP 调试端口的窗口，且合规那条要绕开原生另存对话框：
 
 ```bash
 MMT_EXPORT_DIR="$PWD/.tmp/compliance-export" \
   npx electron-vite dev --remoteDebuggingPort=9222
-# 另开一个终端
-npm run smoke:ui:compliance
+# 另开一个终端。探针进程自己也要 MMT_EXPORT_DIR——它要去那个目录读导出的 PDF 与 .tex
+MMT_EXPORT_DIR="$PWD/.tmp/compliance-export" npm run smoke:ui:compliance
 ```
 
 探针默认连 9222；要验打包产物，把安装包用自己的调试端口起起来，再用 `MMT_CDP_PORT=<端口>` 指过去，同一套断言照跑。
@@ -99,7 +108,8 @@ npm run smoke:ui:compliance
 ## 项目结构
 
 ```
-src/shared/      主进程与渲染层共用的类型与纯逻辑：阶段定义、方法卡、合规文档、沙箱协议
+src/shared/      主进程与渲染层共用的类型与纯逻辑：阶段定义、方法卡、讲解语料、绘图三问与
+                 图表规范、合规文档、沙箱协议
 src/main/        主进程：LLM 适配、阶段状态机与教练、沙箱调度、LaTeX 编译、合规采集导出、
                  sqlite 持久化、safeStorage 密钥
 src/preload/     暴露给渲染层的白名单 IPC 接口（渲染层拿不到任何网络与文件系统能力）

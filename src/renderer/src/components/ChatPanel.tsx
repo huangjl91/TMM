@@ -3,6 +3,7 @@ import { RichText } from './RichText'
 import { CoachCard, ScaffoldView } from './CoachCard'
 import { HINT_LEVELS } from '@shared/stages'
 import type { CoachReply, MessageKind, Scaffold } from '@shared/agent'
+import type { ExplainSource } from '@shared/explain'
 import type { TokenUsage } from '@shared/types'
 
 export interface Msg {
@@ -22,11 +23,19 @@ interface Props {
   error: string | null
   usage: TokenUsage | null
   hintLevel: number
-  onSend: (text: string) => void
+  intakeBusy: boolean
+  /**
+   * 另一条链路（右侧 AI 对话框）正在流式输出。
+   * delta 事件本身不带归属，两条流同时跑会串台，所以同一时刻只放行一条。
+   */
+  busyElsewhere?: boolean
+  onSend: (text: string, quizLog?: string) => void
+  onExplain: (src: ExplainSource, level: number) => void
   onAbort: () => void
   onAskHint: () => void
   onAdopt: (scaffold: Scaffold, messageId: number) => void
   onNewSession: () => void
+  onIntake: () => void
 }
 
 export function ChatPanel({
@@ -35,11 +44,15 @@ export function ChatPanel({
   error,
   usage,
   hintLevel,
+  intakeBusy,
+  busyElsewhere = false,
   onSend,
+  onExplain,
   onAbort,
   onAskHint,
   onAdopt,
-  onNewSession
+  onNewSession,
+  onIntake
 }: Props): ReactNode {
   const [draft, setDraft] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
@@ -50,7 +63,7 @@ export function ChatPanel({
 
   const submit = (): void => {
     const text = draft.trim()
-    if (!text || streaming) return
+    if (!text || streaming || busyElsewhere) return
     setDraft('')
     onSend(text)
   }
@@ -59,9 +72,21 @@ export function ChatPanel({
     <section className="flex min-w-0 flex-1 flex-col bg-[#0f1115]">
       <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
         {messages.length === 0 && (
-          <div className="mx-auto mt-16 max-w-lg text-center text-sm leading-6 text-white/40">
-            <p className="mb-2 text-base text-white/70">把国赛真题贴进来，我们从读题开始。</p>
-            <p>教练只会提问和给分级提示，正文与代码由你自己写出来。</p>
+          <div className="mx-auto mt-12 max-w-lg text-center">
+            <p className="mb-1 text-base text-white/70">从导入赛题开始</p>
+            <p className="mb-4 text-sm leading-6 text-white/40">
+              选题目 PDF 和附件目录，教练会拿着题面与数据清单逐问问你。正文和代码仍然由你自己写。
+            </p>
+            <button
+              onClick={onIntake}
+              disabled={intakeBusy}
+              className="rounded-xl bg-sky-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
+            >
+              {intakeBusy ? '导入中…（PDF 提取要几秒）' : '导入赛题与附件'}
+            </button>
+            <p className="mt-4 text-[11px] leading-5 text-white/25">
+              没有电子题面也可以直接把题目贴进下面的输入框，从读题开始。
+            </p>
           </div>
         )}
         {messages.map((m) => (
@@ -83,7 +108,12 @@ export function ChatPanel({
                 </details>
               ) : null}
               {m.card ? (
-                <CoachCard card={m.card} />
+                <CoachCard
+                  card={m.card}
+                  disabled={streaming}
+                  onQuizAnswer={(t, log) => onSend(t, log)}
+                  onExplain={onExplain}
+                />
               ) : m.scaffold ? (
                 <ScaffoldView scaffold={m.scaffold} onAdopt={(s) => onAdopt(s, m.id)} />
               ) : m.content ? (
@@ -120,11 +150,14 @@ export function ChatPanel({
         <div className="mt-2 flex items-center gap-2">
           <button
             onClick={submit}
-            disabled={streaming || !draft.trim()}
+            disabled={streaming || busyElsewhere || !draft.trim()}
             className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
           >
             发送
           </button>
+          {busyElsewhere && !streaming ? (
+            <span className="text-[11px] text-white/35">右侧 AI 对话框正在回答，等它说完再发</span>
+          ) : null}
           {streaming ? (
             <button
               onClick={onAbort}
@@ -140,6 +173,14 @@ export function ChatPanel({
                 className="rounded-lg border border-sky-500/40 px-3 py-1.5 text-sm text-sky-200/90 hover:bg-sky-500/10"
               >
                 要提示 · L{hintLevel} {HINT_LEVELS[hintLevel]}
+              </button>
+              <button
+                onClick={onIntake}
+                disabled={intakeBusy}
+                title="补充导入题目或附件数据，文件会落进本会话的工作区"
+                className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70 disabled:opacity-40"
+              >
+                {intakeBusy ? '导入中…' : '导入赛题/附件'}
               </button>
               <button
                 onClick={onNewSession}

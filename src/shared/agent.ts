@@ -1,6 +1,10 @@
 import type { CardField, Rubric } from './stages'
 
-export type MessageKind = 'chat' | 'coach' | 'scaffold' | 'submission' | 'system'
+/**
+ * free 是右侧「AI 对话框」的通用问答：它不绑阶段任务卡，直接调模型，
+ * 但仍然过反代写闸门、仍然写进 AI 使用日志。与 coach 分表不必要，靠 kind 分流即可。
+ */
+export type MessageKind = 'chat' | 'coach' | 'scaffold' | 'submission' | 'system' | 'free'
 
 export type StageStatus = 'todo' | 'active' | 'submitted' | 'done'
 
@@ -28,6 +32,23 @@ export interface CheckItem {
   note?: string
 }
 
+export interface QuizOption {
+  key: string
+  text: string
+  /** 选这条意味着什么：只解释路径与代价，不判对错 */
+  means: string
+}
+
+/**
+ * 诊断式选择题：教练把「这一步有哪几条路」摊成选项让学生挑。
+ * 刻意没有 correct/score 之类字段——答完只把选择与理由送回教练，由它继续追问。
+ */
+export interface QuizItem {
+  ask: string
+  options: QuizOption[]
+  multi: boolean
+}
+
 /**
  * Coach 的输出契约。刻意没有"正文"这个字段：
  * 教练能说的只有提问、检查点、当前等级的提示和 rubric 反馈。
@@ -39,6 +60,8 @@ export interface CoachReply {
   hint: { level: number; text: string } | null
   rubric_score: { total: number; comments: string[] }
   blockers: string
+  /** 只在阶段状态里被允许的那几轮出现；空或未给就不渲染 */
+  quiz?: QuizItem[]
 }
 
 export interface Scaffold {
@@ -68,6 +91,11 @@ export interface StageCardField {
   label: string
   hint: string
   content: string
+  /**
+   * 拆出多问后该字段按问各填一份。有这一项时渲染层只认 questions，
+   * content 留空——免得同一格出现两个都能写的入口。
+   */
+  questions?: { idx: number; label: string; content: string }[]
 }
 
 export interface StageCard {
@@ -145,6 +173,40 @@ function clampInt(v: unknown, lo: number, hi: number, fallback: number): number 
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback
 }
 
+const MAX_QUIZ_ITEMS = 2
+const MAX_QUIZ_OPTIONS = 5
+const LETTERS = 'ABCDEFGHIJ'
+
+/**
+ * 选择题的容错解析：条数、长度、重复 key 都在这里收口。
+ * 任何一条不合格只丢那一条，整题不足两个选项就丢掉那一题——
+ * 掉几道题不算失败，把半截 JSON 当成卡片才糟。
+ */
+function parseQuiz(raw: unknown): QuizItem[] {
+  if (!Array.isArray(raw)) return []
+  const out: QuizItem[] = []
+  for (const row of raw) {
+    if (out.length >= MAX_QUIZ_ITEMS) break
+    const r = (row ?? {}) as Record<string, unknown>
+    const ask = str(r.ask, 160).trim()
+    const seen = new Set<string>()
+    const options: QuizOption[] = []
+    for (const [i, opt] of (Array.isArray(r.options) ? r.options : []).slice(0, MAX_QUIZ_OPTIONS).entries()) {
+      const o = (opt ?? {}) as Record<string, unknown>
+      const text = str(o.text, 80).trim()
+      if (!text) continue
+      const given = str(o.key, 4).trim().toUpperCase()
+      const key = LETTERS.includes(given) && !seen.has(given) ? given : LETTERS[i] ?? ''
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      options.push({ key, text, means: str(o.means, 160).trim() })
+    }
+    if (!ask || options.length < 2) continue
+    out.push({ ask, options, multi: r.multi === true })
+  }
+  return out
+}
+
 /** 容错解析：字段缺失按空处理，整体不可解析才返回 null（调用方降级为普通对话） */
 export function parseCoachReply(raw: string): CoachReply | null {
   const json = sliceJsonObject(raw)
@@ -172,6 +234,7 @@ export function parseCoachReply(raw: string): CoachReply | null {
   const question = str(o.next_question).trim()
   // 形状对但内容不是教练契约（端点返回了别的东西）就当解析失败，别让空卡片冒充反馈
   if (!question && checks.length === 0) return null
+  const quiz = parseQuiz(o.quiz)
   return {
     next_question: question,
     checks,
@@ -180,7 +243,8 @@ export function parseCoachReply(raw: string): CoachReply | null {
       total: clampInt(scoreRaw.total, 0, 100, 0),
       comments: Array.isArray(scoreRaw.comments) ? scoreRaw.comments.map((c) => str(c, 400)).filter(Boolean) : []
     },
-    blockers: str(o.blockers)
+    blockers: str(o.blockers),
+    ...(quiz.length ? { quiz } : {})
   }
 }
 

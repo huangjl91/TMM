@@ -5,6 +5,12 @@
 export * as fake from './fake-repo'
 export * from '../src/main/stage'
 export * from '../src/shared/agent'
-export { COACH_SYSTEM, CRITIC_SYSTEM, EXECUTOR_SYSTEM } from '../src/main/agent/prompts'
-export { detectGhostwriting } from '../src/main/agent/anti-ghostwrite'
+export {
+  COACH_SYSTEM,
+  CRITIC_SYSTEM,
+  EXECUTOR_SYSTEM,
+  executorUserBrief
+} from '../src/main/agent/prompts'
+export { plotDigest } from '../src/shared/plots'
+export { detectGhostwriting, filterQuizOptions } from '../src/main/agent/anti-ghostwrite'
 export { ESCALATE_AFTER_ATTEMPTS, HINT_LEVELS, STAGES } from '../src/shared/stages'
