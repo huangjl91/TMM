@@ -599,7 +599,7 @@ export function App(): ReactNode {
                 onClick={() => { setViewMode('guided'); setActiveNav('path') }}
                 className={viewMode === 'guided' ? 'is-active' : ''}
               >
-                学习路径
+                引导学习
               </button>
               <button
                 onClick={() => { setViewMode('coach'); setActiveNav('path') }}
