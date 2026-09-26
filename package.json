@@ -27,6 +27,7 @@
     "smoke:freechat": "esbuild src/shared/compliance.ts --bundle --format=esm --platform=node --outfile=.tmp/compliance.mjs --log-level=warning && esbuild src/main/agent/anti-ghostwrite.ts --bundle --format=esm --platform=node --outfile=.tmp/anti-ghostwrite.mjs --log-level=warning && node tests/freechat-smoke.mjs",
     "smoke:ui:compliance": "node tests/ui-probe.mjs compliance",
     "smoke:intake": "esbuild src/shared/intake.ts --bundle --format=esm --platform=node --outfile=.tmp/intake.mjs --log-level=warning && node tests/intake-smoke.mjs",
+    "smoke:realdata": "esbuild src/shared/intake.ts --bundle --format=esm --platform=node --outfile=.tmp/intake.mjs --log-level=warning && node tests/real-data-preview-smoke.mjs",
     "smoke:questions": "esbuild src/shared/questions.ts --bundle --format=esm --platform=node --outfile=.tmp/questions.mjs --log-level=warning && node tests/questions-smoke.mjs",
     "smoke:ui:questions": "node tests/ui-probe.mjs questions",
     "smoke:ui:quiz": "node tests/ui-probe.mjs quiz",

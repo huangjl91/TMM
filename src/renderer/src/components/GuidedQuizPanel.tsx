@@ -14,7 +14,7 @@ import { A4ProblemViewer } from './A4ProblemViewer'
 import { CandidateModelLecture } from './CandidateModelLecture'
 
 import type { SessionFileView } from '@shared/intake'
-import { humanSize } from '@shared/intake'
+import { buildRealDataPreviewCode, humanSize, isReadableTabularFile } from '@shared/intake'
 
 interface Props {
   sessionId: number | null
@@ -122,10 +122,8 @@ export function GuidedQuizPanel({
   )
   const curQ: GuidedQuestion = state?.questions?.[activeStep] || stepQuestions[activeStep]
   const curModels = state?.candidateModels?.length ? state.candidateModels : fallbackModels
-  const hasDataAttachment = Boolean(files?.some((f) => f.kind !== 'problem'))
-  const visualizationReadsData = Boolean(
-    curQ.visualization?.pythonCode && /read_(?:csv|excel|parquet)|loadtxt/i.test(curQ.visualization.pythonCode)
-  )
+  const selectedDataFile = files?.find(isReadableTabularFile)
+  const effectiveVisualizationCode = selectedDataFile ? buildRealDataPreviewCode(selectedDataFile) : null
 
   // 深度重新解构本问（结合赛题全文重新提取机理并刷新引导题）
   const handleReanalyze = async (): Promise<void> => {
@@ -249,12 +247,8 @@ export function GuidedQuizPanel({
 
   // 运行第四步的可视化代码
   const handleRunVisualizationCode = async (): Promise<void> => {
-    const code = curQ.visualization?.pythonCode
+    const code = effectiveVisualizationCode
     if (!code) return
-    if (!hasDataAttachment || !visualizationReadsData) {
-      setSyncStatus('未运行：请先导入数据附件，并让绘图代码显式读取该数据；系统不会运行内置模拟数据。')
-      return
-    }
     if (onSendToSandbox) {
       onSendToSandbox(code)
     }
@@ -721,7 +715,7 @@ export function GuidedQuizPanel({
               </div>
               <button
                 onClick={handleRunVisualizationCode}
-                disabled={sandboxRunning || !hasDataAttachment || !visualizationReadsData}
+                disabled={sandboxRunning || !effectiveVisualizationCode}
                 className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
               >
                 <span>{sandboxRunning ? '⏳' : '🚀'}</span>
@@ -729,11 +723,15 @@ export function GuidedQuizPanel({
               </button>
             </div>
 
-            {!hasDataAttachment || !visualizationReadsData ? (
+            {!effectiveVisualizationCode ? (
               <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-200">
-                运行已锁定：需要数据附件，且代码必须通过 read_csv/read_excel/read_parquet/loadtxt 显式读取真实数据。
+                运行已锁定：请导入 CSV、TSV、XLSX 或 XLS 数据附件。系统不会运行模拟数组。
               </div>
-            ) : null}
+            ) : (
+              <div className="rounded-lg border border-sky-500/20 bg-sky-500/[0.05] px-3 py-2 text-xs text-sky-200">
+                当前代码读取：{selectedDataFile?.relPath}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 text-xs">
               <div className="space-y-1 rounded-lg border border-white/10 bg-black/30 p-3">
@@ -777,7 +775,7 @@ export function GuidedQuizPanel({
                 查看 Python 学术绘图代码模板 (Matplotlib / Seaborn)
               </summary>
               <pre className="mt-2 max-h-56 overflow-auto rounded bg-black/60 p-3 font-mono text-[11px] leading-relaxed text-emerald-200/90">
-                {curQ.visualization.pythonCode}
+                {effectiveVisualizationCode ?? curQ.visualization.pythonCode}
               </pre>
             </details>
           </div>

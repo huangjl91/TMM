@@ -15,6 +15,7 @@ import { questionsOf } from './stage'
 import { parseQuestions } from '../shared/questions'
 import {
   buildDefaultGuidedQuestions,
+  enforceEvidenceSafeQuestions,
   extractProblemElements,
   synthesizeGuidedDraft,
   getCandidateModelsForQuestion,
@@ -82,7 +83,9 @@ function loadOrGenerateAnalysis(
     if (cached) {
       try {
         const knowledge = JSON.parse(cached.knowledgeJson) as ProblemKnowledge
-        const questions = JSON.parse(cached.questionsJson) as Record<GuidedStep, GuidedQuestion>
+        const questions = enforceEvidenceSafeQuestions(
+          JSON.parse(cached.questionsJson) as Record<GuidedStep, GuidedQuestion>
+        )
         const elements = JSON.parse(cached.elementsJson) as ProblemElements
         return { knowledge, questions, elements, candidateModels, brief, sourceReady }
       } catch (e) {
@@ -263,7 +266,7 @@ export async function handleGuidedReanalyze(
             sessionId,
             questionIdx,
             JSON.stringify(parsed.knowledge),
-            JSON.stringify(parsed.questions),
+            JSON.stringify(enforceEvidenceSafeQuestions(parsed.questions)),
             JSON.stringify(parsed.elements)
           )
           logAiUsage(

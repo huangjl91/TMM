@@ -15,6 +15,8 @@ interface PyProbe extends PythonInvocation {
   version: string
   numpy: boolean
   matplotlib: boolean
+  pandas: boolean
+  openpyxl: boolean
 }
 
 let cached: RuntimeInfo | null = null
@@ -26,7 +28,7 @@ let probing: Promise<RuntimeInfo> | null = null
 const PROBE = [
   'import json, sys, os',
   'out = {"exe": os.path.realpath(sys.executable), "version": ".".join(map(str, sys.version_info[:3]))}',
-  'for m in ("numpy", "matplotlib"):',
+  'for m in ("numpy", "matplotlib", "pandas", "openpyxl"):',
   '    try:',
   '        __import__(m)',
   '        out[m] = True',
@@ -66,7 +68,9 @@ function runProbe(inv: PythonInvocation, timeout: number): Promise<PyProbe> {
             exe: String(p.exe),
             version: String(p.version),
             numpy: p.numpy === true,
-            matplotlib: p.matplotlib === true
+            matplotlib: p.matplotlib === true,
+            pandas: p.pandas === true,
+            openpyxl: p.openpyxl === true
           })
         } catch (e) {
           reject(e as Error)
@@ -147,9 +151,9 @@ function readdirSafe(dir: string): string[] {
 function labelOf(p: PyProbe | null): string | null {
   if (!p) return null
   // 右栏很窄，版本号放前面才看得见，完整路径留给 hover
-  return p.numpy && p.matplotlib
+  return p.numpy && p.matplotlib && p.pandas && p.openpyxl
     ? `Python ${p.version} · ${p.exe}`
-    : `Python ${p.version} · 缺 numpy/matplotlib · ${p.exe}`
+    : `Python ${p.version} · 缺数据分析依赖 · ${p.exe}`
 }
 
 function info(python: string | null, xelatex: string | null): RuntimeInfo {
@@ -160,7 +164,7 @@ function info(python: string | null, xelatex: string | null): RuntimeInfo {
     dbPath: getDbFile(),
     sandboxRoot: join(app.getPath('userData'), 'workspaces'),
     python,
-    pythonReady: Boolean(cachedPy?.numpy && cachedPy?.matplotlib),
+    pythonReady: Boolean(cachedPy?.numpy && cachedPy?.matplotlib && cachedPy?.pandas && cachedPy?.openpyxl),
     xelatex
   }
 }
@@ -178,7 +182,7 @@ export function detectToolchain(): Promise<RuntimeInfo> {
     const settled = await Promise.allSettled(probes)
     const found = settled.filter((s) => s.status === 'fulfilled').map((s) => (s as PromiseFulfilledResult<PyProbe>).value)
     // 全都没探测到时也要留一个可报错的对象，别让"未探测到"掩盖真实原因
-    cachedPy = found.find((p) => p.numpy && p.matplotlib) ?? found[0] ?? null
+    cachedPy = found.find((p) => p.numpy && p.matplotlib && p.pandas && p.openpyxl) ?? found[0] ?? null
     if (!cachedPy && found.length === 0) console.warn('Python 探测失败：候选解释器全部不可用')
     cached = info(labelOf(cachedPy), cachedTex)
     return cached

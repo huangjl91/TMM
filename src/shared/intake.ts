@@ -27,6 +27,58 @@ export interface IntakeResult {
   problemWarning: string | null
 }
 
+export function isReadableTabularFile(file: Pick<SessionFileView, 'kind' | 'relPath' | 'name'>): boolean {
+  return file.kind === 'data' && Boolean(file.relPath) && /\.(csv|tsv|xlsx|xls)$/i.test(file.name)
+}
+
+/** 生成只读取已导入附件的基础探索代码；不写入示例数组，也不预设任何结果。 */
+export function buildRealDataPreviewCode(
+  file: Pick<SessionFileView, 'kind' | 'relPath' | 'name'>
+): string | null {
+  if (!isReadableTabularFile(file)) return null
+  const pathLiteral = JSON.stringify(file.relPath.replace(/\\/g, '/'))
+  const isExcel = /\.xlsx?$/i.test(file.name)
+  const isTsv = /\.tsv$/i.test(file.name)
+  const reader = isExcel
+    ? `pd.read_excel(DATA_FILE)`
+    : `pd.read_csv(DATA_FILE${isTsv ? ", sep='\\t'" : ''})`
+  return `# 此代码只读取已导入的真实附件，不创建模拟数据
+from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+
+plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
+
+DATA_FILE = Path(${pathLiteral})
+if not DATA_FILE.exists():
+    raise FileNotFoundError(f'找不到已导入附件: {DATA_FILE}')
+
+df = ${reader}
+if df.empty:
+    raise ValueError('数据表为空，无法绘图')
+
+numeric = df.select_dtypes(include='number')
+if numeric.shape[1] == 0:
+    raise ValueError(f'没有可绘制的数值列；现有字段: {list(df.columns)}')
+
+print('数据文件:', DATA_FILE)
+print('数据形状:', df.shape)
+print('字段:', list(df.columns))
+print(numeric.describe().to_string())
+
+cols = list(numeric.columns[:4])
+ax = numeric[cols].plot(figsize=(10, 5), linewidth=1.5)
+ax.set_xlabel('样本序号（请按题意替换为真实横轴字段）')
+ax.set_ylabel('观测值（请补充物理量纲）')
+ax.set_title(f'真实附件基础检查：{DATA_FILE.name}')
+ax.grid(True, linestyle='--', alpha=0.35)
+plt.tight_layout()
+plt.savefig('real_data_preview.png', dpi=300)
+print('已生成 real_data_preview.png；请根据题意选择横轴、单位和模型输出后再形成结论。')
+`
+}
+
 /** 注入教练的预算：题目原文再长也只给这么多，否则每轮对话都在烧 token */
 export const MAX_BRIEFING_CHARS = 4000
 export const MAX_DIGEST_CHARS = 20_000

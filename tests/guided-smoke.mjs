@@ -52,8 +52,9 @@ assert.ok(vis.xLabel, '缺少横轴与量纲说明')
 assert.ok(vis.yLabel, '缺少纵轴与量纲说明')
 assert.ok(vis.expectedFinding, '缺少图表揭示现象说明')
 assert.ok(vis.paperConclusion.includes('待'), '结论必须保留待计算占位符')
-assert.ok(vis.pythonCode.includes('import matplotlib.pyplot as plt'), '缺少学术级 Python 绘图代码')
-console.log('PASS  第4阶梯数据可视化专项完备 (画什么图 + 坐标量纲 + 现象 + 论文结论 + 代码)')
+assert.ok(vis.pythonCode.includes('不会创建随机数或示例数组'), '默认代码必须是安全占位符')
+assert.equal(vis.pythonCode.includes('np.random'), false, '默认代码不得生成随机数据')
+console.log('PASS  第4阶梯数据可视化专项完备，默认代码不再包含模拟数组')
 
 // 5. 解题成果综合草稿生成校验
 const choices = {
@@ -101,8 +102,9 @@ assert.ok(mgKnowledge.topic.includes('微网') || mgKnowledge.topic.includes('�
 assert.ok(mgQuestions.intuition.options.some((o) => o.text.includes('0:00 与 24:00') || o.text.includes('购电总费用')))
 assert.ok(mgQuestions.model_select.options.some((o) => o.text.includes('MILP') || o.text.includes('混合整数线性规划')))
 assert.ok(mgQuestions.formulation.options.some((o) => o.text.includes('η=90%') || o.text.includes('90%')))
-assert.ok(mgQuestions.visualization.visualization.pythonCode.includes('p_buy'))
-console.log('PASS  赛题深度定制引导：成功生成 100% 贴合 C 题微网实体的 4 阶梯选择题与沙箱出图代码')
+assert.equal(mgQuestions.visualization.visualization.pythonCode.includes('p_buy'), false)
+assert.ok(mgQuestions.visualization.visualization.pythonCode.includes('不会创建随机数或示例数组'))
+console.log('PASS  赛题深度定制引导：生成贴合 C 题的选择题，且不注入虚构求解数组')
 
 console.log('\nAll guided smoke tests passed!')
 

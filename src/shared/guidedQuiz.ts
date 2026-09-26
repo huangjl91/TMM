@@ -141,6 +141,18 @@ export interface GuidedSessionState {
   }
 }
 
+export const REAL_DATA_CODE_PLACEHOLDER = `# 请先导入 CSV/TSV/XLSX 数据附件。
+# 系统随后会生成显式读取“附件/文件名”的基础检查代码；不会创建随机数或示例数组。`
+
+/** 历史缓存和在线模型输出都经过这里，避免把演示数组当作学生的真实结果运行。 */
+export function enforceEvidenceSafeQuestions(
+  questions: Record<GuidedStep, GuidedQuestion>
+): Record<GuidedStep, GuidedQuestion> {
+  const visualization = questions.visualization?.visualization
+  if (visualization) visualization.pythonCode = REAL_DATA_CODE_PLACEHOLDER
+  return questions
+}
+
 /** 从题干与全文中抽取关键要素（核心目标、输入数据、硬性物理约束、规定交付物） */
 export function extractProblemElements(questionText: string, fullProblemText = ''): ProblemElements {
   const combined = `${questionText}\n${fullProblemText}`
@@ -778,7 +790,9 @@ export function buildDefaultGuidedQuestions(
 
   // 1. 优先检测是否为微电网电力调控赛题
   if (/微网|外部电网|储能|光伏|电池|充放电|电量|购电|小区负载|分时电价|soc/i.test(combined)) {
-    return buildMicrogridGuidedQuestions(questionIdx, briefText, fullProblemText)
+    const built = buildMicrogridGuidedQuestions(questionIdx, briefText, fullProblemText)
+    built.questions = enforceEvidenceSafeQuestions(built.questions)
+    return built
   }
 
   const cat = detectProblemCategory(combined)
@@ -1015,7 +1029,7 @@ plt.show()
       }
     }
 
-    return { knowledge, questions, candidateModels }
+    return { knowledge, questions: enforceEvidenceSafeQuestions(questions), candidateModels }
   }
 
   if (cat === 'evaluation') {
@@ -1233,7 +1247,7 @@ plt.show()
       }
     }
 
-    return { knowledge, questions, candidateModels }
+    return { knowledge, questions: enforceEvidenceSafeQuestions(questions), candidateModels }
   }
 
   // 默认：时序预测与数据趋势类 (prediction)
@@ -1451,7 +1465,7 @@ plt.show()
     }
   }
 
-  return { knowledge, questions, candidateModels }
+  return { knowledge, questions: enforceEvidenceSafeQuestions(questions), candidateModels }
 }
 
 /** 汇总统合学生的 4 步选择，生成该小问的综合解题方案与论文初稿片段 */

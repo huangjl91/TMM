@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict'
 import {
   MAX_BRIEFING_CHARS,
+  buildRealDataPreviewCode,
   buildDigest,
   clip,
   csvDigest,
@@ -14,6 +15,7 @@ import {
   extOf,
   humanSize,
   intakeBriefing,
+  isReadableTabularFile,
   needsVerify,
   normalizeExtracted,
   safeName
@@ -174,6 +176,23 @@ check('只有附件时不谎称有题面', () => {
   const out = intakeBriefing([file({ kind: 'data', name: 'a.csv', relPath: '附件/a.csv', digestKind: 'csv', digest: '列数 1' })])
   assert.ok(!out.includes('赛题原文'))
   assert.ok(out.includes('已导入附件'))
+})
+
+check('CSV 附件生成真实路径读取代码，不生成模拟数组', () => {
+  const data = file({ kind: 'data', name: '观测.csv', relPath: '附件/观测.csv' })
+  assert.equal(isReadableTabularFile(data), true)
+  const code = buildRealDataPreviewCode(data)
+  assert.ok(code.includes('Path("附件/观测.csv")'))
+  assert.ok(code.includes('pd.read_csv(DATA_FILE)'))
+  assert.ok(!code.includes('np.random'))
+})
+
+check('Excel 与 TSV 使用对应读取器，非表格附件不生成代码', () => {
+  const excel = buildRealDataPreviewCode(file({ kind: 'data', name: '结果.xlsx', relPath: '附件/结果.xlsx' }))
+  const tsv = buildRealDataPreviewCode(file({ kind: 'data', name: '结果.tsv', relPath: '附件/结果.tsv' }))
+  assert.ok(excel.includes('pd.read_excel(DATA_FILE)'))
+  assert.ok(tsv.includes("sep='\\t'"))
+  assert.equal(buildRealDataPreviewCode(file({ kind: 'data', name: '压缩包.zip', relPath: '附件/压缩包.zip' })), null)
 })
 
 console.log(`\n${String(pass)} passed, ${String(fail)} failed`)
