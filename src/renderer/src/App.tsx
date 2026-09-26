@@ -67,7 +67,7 @@ export function App(): ReactNode {
   const [focus, setFocus] = useState(NO_QUESTION)
   const [viewMode, setViewMode] = useState<'guided' | 'coach'>('guided')
   const [coachOpen, setCoachOpen] = useState(true)
-  const [activeNav, setActiveNav] = useState<'path' | 'workspace' | 'library'>('path')
+  const [activeNav, setActiveNav] = useState<'path' | 'library'>('path')
   const [assistantTab, setAssistantTab] = useState<'coach' | 'evidence'>('coach')
 
   const sessionIdRef = useRef<number | null>(null)
@@ -587,7 +587,6 @@ export function App(): ReactNode {
           activeNav={activeNav}
           onNavigate={(key) => {
             setActiveNav(key)
-            if (key === 'workspace') setViewMode('coach')
             if (key === 'path') setViewMode('guided')
             if (key === 'library') { setAssistantTab('evidence'); setCoachOpen(true) }
           }}
@@ -603,7 +602,7 @@ export function App(): ReactNode {
                 学习路径
               </button>
               <button
-                onClick={() => { setViewMode('coach'); setActiveNav('workspace') }}
+                onClick={() => { setViewMode('coach'); setActiveNav('path') }}
                 className={viewMode === 'coach' ? 'is-active' : ''}
               >
                 自由探究
