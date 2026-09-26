@@ -46,7 +46,15 @@ assert.ok(manifest.algorithms.every((item) => item.usesFutureInformation === fal
 assert.equal(manifest.split.trainRows, 24)
 assert.equal(manifest.split.testRows, 6)
 assert.equal(manifest.selection.metric, 'RMSE')
+assert.equal(manifest.selection.scope, 'rolling-origin validation inside training segment')
+assert.equal(manifest.selection.usesHoldoutTestForSelection, false)
+assert.equal(manifest.selection.validationFolds, 12)
 assert.ok(manifest.metricsByModel[manifest.selection.bestModel])
+assert.ok(manifest.crossValidationMetricsByModel[manifest.selection.bestModel])
+assert.equal(
+  manifest.selection.bestModel,
+  Object.entries(manifest.crossValidationMetricsByModel).sort((a, b) => a[1].RMSE - b[1].RMSE)[0][0]
+)
 for (const metrics of Object.values(manifest.metricsByModel)) {
   assert.ok(metrics.MAE >= 0)
   assert.ok(metrics.RMSE >= metrics.MAE)
@@ -55,7 +63,7 @@ assert.equal(manifest.outputs.length, 2)
 assert.ok(manifest.outputs.every((item) => item.sha256.length === 64))
 assert.equal(manifest.sourceSha256.length, 64)
 assert.equal(manifest.configurationSha256.length, 64)
-assert.equal(manifest.predictionIntervals.calibrationSource, 'training residuals only')
+assert.equal(manifest.predictionIntervals.calibrationSource, 'rolling-origin validation residuals inside training segment')
 assert.ok(manifest.predictionIntervals.calibrationSamples >= 5)
 assert.deepEqual(manifest.predictionIntervals.levels.map((item) => item.level), [0.8, 0.95])
 assert.ok(manifest.predictionIntervals.levels.every((item) => item.halfWidth >= 0 && item.testCoverage >= 0 && item.testCoverage <= 1))
@@ -64,6 +72,7 @@ for (const column of ['lower_80', 'upper_80', 'lower_95', 'upper_95']) assert.ok
 const summary = summarizePredictionEvidence(manifest)
 assert.ok(summary)
 assert.equal(summary.bestModel, manifest.selection.bestModel)
+assert.equal(summary.selectionFolds, 12)
 assert.equal(manifest.timeFrequency.inferred, 'MS')
 assert.equal(manifest.timeFrequency.seasonalPeriod, 12)
 assert.deepEqual(manifest.skippedModels, [])

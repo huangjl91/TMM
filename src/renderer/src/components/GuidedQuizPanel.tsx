@@ -1004,6 +1004,9 @@ export function GuidedQuizPanel({
                     按 {predictionEvidence.selectionMetric} 选择：{predictionEvidence.bestModel}
                   </span>
                 </div>
+                <div className="text-white/55">
+                  模型选择仅使用训练段内部的 {predictionEvidence.selectionFolds} 折滚动时间验证；测试集只用于最终评估。
+                </div>
                 <div className="grid gap-2 text-white/65 md:grid-cols-2">
                   <div>训练：{predictionEvidence.trainRows} 行，{predictionEvidence.trainRange}</div>
                   <div>测试：{predictionEvidence.testRows} 行，{predictionEvidence.testRange}</div>

@@ -9,6 +9,7 @@ export interface PredictionBaselineSelection extends DataPreviewSelection {
 export interface PredictionEvidenceSummary {
   bestModel: string
   selectionMetric: string
+  selectionFolds: number
   trainRange: string
   testRange: string
   trainRows: number
@@ -55,6 +56,7 @@ export function summarizePredictionEvidence(value: unknown): PredictionEvidenceS
   return {
     bestModel: selection.bestModel,
     selectionMetric: typeof selection.metric === 'string' ? selection.metric : 'RMSE',
+    selectionFolds: Number.isInteger(Number(selection.validationFolds)) ? Number(selection.validationFolds) : 0,
     trainRange: `${String(split.trainStart)} 至 ${String(split.trainEnd)}`,
     testRange: `${String(split.testStart)} 至 ${String(split.testEnd)}`,
     trainRows,
@@ -186,13 +188,13 @@ for observed in actual:
     history.append(float(observed))
 moving_pred = np.asarray(moving_pred, dtype=float)
 
-nonzero = actual != 0
-def metric_set(prediction):
-    errors = actual - prediction
+def metric_pair(observed, prediction):
+    errors = observed - prediction
+    nonzero = observed != 0
     return {
         'MAE': float(np.mean(np.abs(errors))),
         'RMSE': float(np.sqrt(np.mean(errors ** 2))),
-        'MAPE_percent': float(np.mean(np.abs(errors[nonzero] / actual[nonzero])) * 100) if bool(nonzero.any()) else None,
+        'MAPE_percent': float(np.mean(np.abs(errors[nonzero] / observed[nonzero])) * 100) if bool(nonzero.any()) else None,
         'MAPE_nonzeroSamples': int(nonzero.sum())
     }
 
@@ -254,24 +256,31 @@ else:
     reason = '无法从时间字段识别支持的固定频率' if not seasonal_period else f'训练段至少需要 {2 * seasonal_period} 行以覆盖两个完整周期'
     skipped_models.append({'id': 'seasonal-naive', 'reason': reason, 'inferredFrequency': inferred_frequency})
 
-metrics = {name: metric_set(values) for name, values in predictions.items()}
-best_model = min(metrics, key=lambda name: metrics[name]['RMSE'])
+metrics = {name: metric_pair(actual, values) for name, values in predictions.items()}
+
+# 只在训练段内部做扩展窗口滚动验证来选模型；留出的测试段不参与选择。
+train_target = work['_target'].iloc[:train_count].to_numpy(dtype=float)
+seasonal_enabled = bool(seasonal_period and train_count >= 2 * seasonal_period)
+cv_start = max(6, seasonal_period if seasonal_enabled else 3)
+cv_actual = train_target[cv_start:]
+cv_predictions = {name: [] for name in predictions}
+for origin in range(cv_start, train_count):
+    past = train_target[:origin]
+    cv_predictions['walk-forward-naive-lag-1'].append(float(past[-1]))
+    local_x = np.arange(origin, dtype=float)
+    local_slope, local_intercept = np.polyfit(local_x, past, 1)
+    cv_predictions['linear-trend'].append(float(local_intercept + local_slope * origin))
+    cv_predictions['walk-forward-moving-average-3'].append(float(np.mean(past[-3:])))
+    if seasonal_enabled:
+        cv_predictions[f'seasonal-naive-{seasonal_period}'].append(float(train_target[origin - seasonal_period]))
+cv_predictions = {name: np.asarray(values, dtype=float) for name, values in cv_predictions.items()}
+cv_metrics = {name: metric_pair(cv_actual, values) for name, values in cv_predictions.items()}
+best_model = min(cv_metrics, key=lambda name: cv_metrics[name]['RMSE'])
 best_pred = predictions[best_model]
 errors = actual - best_pred
 
-# 使用训练段残差估计对称经验预测区间，测试目标值只用于事后覆盖率检查。
-train_target = work['_target'].iloc[:train_count].to_numpy(dtype=float)
-train_residuals = {
-    'walk-forward-naive-lag-1': train_target[1:] - train_target[:-1],
-    'linear-trend': train_target - (trend_intercept + trend_slope * train_x),
-    'walk-forward-moving-average-3': np.asarray([
-        train_target[index] - float(np.mean(train_target[index - 3:index]))
-        for index in range(3, train_count)
-    ], dtype=float)
-}
-if seasonal_period and train_count >= 2 * seasonal_period:
-    train_residuals[f'seasonal-naive-{seasonal_period}'] = train_target[seasonal_period:] - train_target[:-seasonal_period]
-calibration_errors = np.abs(train_residuals[best_model])
+# 使用训练段滚动验证残差估计经验预测区间，测试目标值只用于事后覆盖率检查。
+calibration_errors = np.abs(cv_actual - cv_predictions[best_model])
 if len(calibration_errors) < 5:
     raise ValueError('训练残差少于 5 个，无法可靠估计预测区间')
 width_80 = float(np.quantile(calibration_errors, 0.80))
@@ -355,12 +364,16 @@ manifest = {
     'selection': {
         'metric': 'RMSE',
         'bestModel': best_model,
-        'scope': 'same chronological holdout test set'
+        'scope': 'rolling-origin validation inside training segment',
+        'validationStartRow': int(cv_start + 1),
+        'validationFolds': int(len(cv_actual)),
+        'usesHoldoutTestForSelection': False
     },
+    'crossValidationMetricsByModel': cv_metrics,
     'metricsByModel': metrics,
     'predictionIntervals': {
         'method': 'symmetric empirical absolute residual quantiles',
-        'calibrationSource': 'training residuals only',
+        'calibrationSource': 'rolling-origin validation residuals inside training segment',
         'calibrationSamples': int(len(calibration_errors)),
         'assumptions': ['训练残差可代表未来误差尺度', '区间关于点预测对称'],
         'levels': [
@@ -376,10 +389,11 @@ manifest = {
 Path('model_evidence.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
 
 print(f'时间切分: 训练 {train_count} 行，测试 {test_count} 行')
+print(f'训练段滚动验证: {len(cv_actual)} 折；按验证 RMSE 选择 {best_model}')
 print('同一测试集模型比较:')
 for name, values in metrics.items():
     print(f"  {name}: MAE={values['MAE']:.6g}, RMSE={values['RMSE']:.6g}, MAPE={values['MAPE_percent'] if values['MAPE_percent'] is not None else '不适用'}")
-print(f'当前测试集最佳模型（按 RMSE）: {best_model}')
+print(f'独立测试集评估模型: {best_model}')
 print(f'经验预测区间: 80%半宽={width_80:.6g}，覆盖率={coverage_80:.1%}; 95%半宽={width_95:.6g}，覆盖率={coverage_95:.1%}')
 print('已生成 prediction_baseline_results.csv、prediction_baseline.png 与 model_evidence.json')
 print('这是比较后续模型的最低基线，不是论文结论。')
