@@ -401,7 +401,7 @@ export function GuidedQuizPanel({
 
         <div className="flex items-center gap-2">
           {/* 导入赛题与附件按钮 */}
-          {onIntake ? (
+          {onIntake && state?.sourceReady ? (
             <button
               onClick={onIntake}
               disabled={intakeBusy}
@@ -409,7 +409,7 @@ export function GuidedQuizPanel({
               title="选择题目 PDF/文档及数据附件，系统将自动切分问题并准备引导"
             >
               <UploadSimple size={15} weight="bold" />
-              <span>{intakeBusy ? '正在解析赛题...' : '导入赛题与附件'}</span>
+              <span>{intakeBusy ? '正在解析…' : '追加附件'}</span>
             </button>
           ) : null}
 

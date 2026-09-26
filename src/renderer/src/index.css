@@ -45,6 +45,7 @@ pre code {
 body { background: #f4f8f7; color: #17324d; }
 button, textarea, input, select { font: inherit; }
 button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
 .tmm-light { background: #f4f8f7; color: #17324d; font-size: 13px; }
 .tmm-header { height: 52px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 1px solid #dce8e5; background: #fff; }
 .tmm-wordmark,.tmm-header-actions { display: flex; align-items: center; gap: 12px; }
@@ -89,6 +90,9 @@ button { cursor: pointer; }
 .tmm-light [class*="bg-amber-500/"] { background-color: #fff9ed !important; }
 .tmm-light [class*="border-amber-500/"] { border-color: #ead39d !important; }
 .tmm-light button[class*="bg-sky-"],.tmm-light button[class*="bg-emerald-"] { color: #fff !important; }
+.tmm-light button:disabled { opacity: 1 !important; background: #edf2f1 !important; border-color: #d5e0de !important; color: #718397 !important; box-shadow: none !important; }
+.tmm-light button:disabled * { color: #718397 !important; }
+.tmm-light button:not(:disabled)[class*="text-sky-"] { color: #087568 !important; }
 .tmm-light > div > div > main > div > div:first-child { border-bottom-color: #dce8e5 !important; background: #f7faf9 !important; }
 .tmm-light textarea,.tmm-light input,.tmm-light select { color: #17324d; background-color: #fff; border-color: #cadbd7; }.tmm-light ::placeholder { color: #9aa8b2; }.tmm-light ::-webkit-scrollbar-thumb { background: #c8d8d4; }
 @media (max-width: 1120px) { .tmm-assistant { width: 300px; }.tmm-journey-label { display: none; }.tmm-principle { display: none; } }
