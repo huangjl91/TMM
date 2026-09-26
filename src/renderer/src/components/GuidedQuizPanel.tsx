@@ -388,13 +388,13 @@ export function GuidedQuizPanel({
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-[#0f1115] text-white/90">
       {/* 顶部：小问切换 Tabs 与 导入按钮 */}
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#141720] px-5 py-2.5">
+      <div className="guided-toolbar flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#141720] px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-sky-500/20 text-xs font-bold text-sky-400">
             解
           </span>
           <span className="text-sm font-semibold tracking-wide text-white">引导式解题中心</span>
-          <span className="rounded bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-300">
+          <span className="guided-mode-badge rounded px-2 py-0.5 text-[11px]">
             由浅入深 · 决策式做题
           </span>
         </div>

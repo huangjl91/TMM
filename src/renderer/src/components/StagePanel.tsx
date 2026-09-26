@@ -15,7 +15,7 @@ export function StagePanel({ stages, currentId, onOpen, activeNav = 'path', onNa
     <div className="tmm-rail-brand">T</div>
     <button onClick={() => onNavigate?.('path')} className={`tmm-rail-item ${activeNav === 'path' ? 'is-active' : ''}`} title="学习路径"><Path size={20} weight="duotone" /><small>路径</small></button>
     <button onClick={() => onNavigate?.('workspace')} className={`tmm-rail-item ${activeNav === 'workspace' ? 'is-active' : ''}`} title="工作区"><FolderOpen size={20} weight="regular" /><small>工作区</small></button>
-    <button onClick={() => onNavigate?.('library')} className={`tmm-rail-item ${activeNav === 'library' ? 'is-active' : ''}`} title="资料与证据"><Books size={20} weight="regular" /><small>证据</small></button>
+    <button onClick={() => onNavigate?.('library')} className={`tmm-rail-item ${activeNav === 'library' ? 'is-active' : ''}`} title="资料库"><Books size={20} weight="regular" /><small>资料</small></button>
     <div className="tmm-rail-spacer" />
     <div className="tmm-rail-step">{currentId}<small>/ 11</small></div>
     <ol className="tmm-stage-semantics" aria-label="完整建模阶段">

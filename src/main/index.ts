@@ -19,14 +19,14 @@ function windowIcon(): string | undefined {
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1100,
-    minHeight: 680,
+    width: 1280,
+    height: 800,
+    minWidth: 1024,
+    minHeight: 640,
     show: false,
     title: '数学建模教练',
     icon: windowIcon(),
-    backgroundColor: '#0f1115',
+    backgroundColor: '#f4f8f7',
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
