@@ -11,6 +11,7 @@ workspaces/
 release/
 release-*/
 testdata/
+/真实赛题-C题/
 
 # 密钥与本地环境，永远不入库
 .env
