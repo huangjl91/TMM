@@ -109,6 +109,10 @@ button:disabled { cursor: not-allowed; }
 .tmm-light [class*="text-[10px]"] { font-size: 11px !important; }.tmm-light [class*="text-[11px]"] { font-size: 12px !important; }.tmm-light [class*="text-[11.5px]"] { font-size: 12px !important; }.tmm-light [class*="text-[12px]"] { font-size: 13px !important; }
 .tmm-light > div > div > main > div > div:first-child { border-bottom-color: #dce8e5 !important; background: #f7faf9 !important; }
 .tmm-light textarea,.tmm-light input,.tmm-light select { color: #17324d; background-color: #fff; border-color: #cadbd7; }.tmm-light ::placeholder { color: #9aa8b2; }.tmm-light ::-webkit-scrollbar-thumb { background: #c8d8d4; }
+.tmm-light .guided-code-disclosure { background: #f7faf9 !important; border-color: #cfdfdc !important; }
+.tmm-light .guided-code-disclosure > summary { color: #35566f !important; font-size: 13px; }
+.tmm-light .guided-code-preview { background: #142331 !important; color: #eef8f5 !important; border: 1px solid #294052; font-size: 13px !important; line-height: 1.65; tab-size: 2; box-shadow: inset 0 1px 0 rgb(255 255 255 / .05); }
+.tmm-light .guided-code-preview::selection,.tmm-light .guided-code-preview *::selection { background: #157f72; color: #fff; }
 @keyframes tmm-rise { from { opacity: .65; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 @media (max-width: 1120px) { .tmm-assistant { width: 280px; }.tmm-journey-label { display: none; }.tmm-principle { display: none; } }

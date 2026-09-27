@@ -1025,20 +1025,20 @@ export function GuidedQuizPanel({
             ) : null}
 
             {/* 可收起的代码预览 */}
-            <details className="rounded-lg border border-white/10 bg-black/30 p-3 text-xs">
+            <details className="guided-code-disclosure rounded-lg border border-white/10 bg-black/30 p-3 text-xs">
               <summary className="cursor-pointer font-medium text-white/60 hover:text-white">
                 查看 Python 学术绘图代码模板 (Matplotlib / Seaborn)
               </summary>
-              <pre className="mt-2 max-h-56 overflow-auto rounded bg-black/60 p-3 font-mono text-[11px] leading-relaxed text-emerald-200/90">
+              <pre className="guided-code-preview mt-2 max-h-56 overflow-auto rounded p-3 font-mono leading-relaxed">
                 {effectiveVisualizationCode ?? curQ.visualization.pythonCode}
               </pre>
             </details>
             {effectivePredictionCode ? (
-              <details className="rounded-lg border border-sky-500/20 bg-black/30 p-3 text-xs">
+              <details className="guided-code-disclosure rounded-lg border border-sky-500/20 bg-black/30 p-3 text-xs">
                 <summary className="cursor-pointer font-medium text-sky-200/70 hover:text-sky-100">
                   查看可复现模型比较代码
                 </summary>
-                <pre className="mt-2 max-h-56 overflow-auto rounded bg-black/60 p-3 font-mono text-[11px] leading-relaxed text-sky-100/90">
+                <pre className="guided-code-preview mt-2 max-h-56 overflow-auto rounded p-3 font-mono leading-relaxed">
                   {effectivePredictionCode}
                 </pre>
               </details>
