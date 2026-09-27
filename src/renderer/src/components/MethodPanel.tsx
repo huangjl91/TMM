@@ -11,6 +11,21 @@ interface Props {
   onExplain?: (src: ExplainSource, level: number) => void
 }
 
+function categoryTone(category: MethodCard['category']): string {
+  switch (category) {
+    case '预处理': return 'bg-[#e5f4f0] text-[#087568]'
+    case '预测': return 'bg-[#e8f1fb] text-[#2e6598]'
+    case '统计': return 'bg-[#f0ebf8] text-[#69508f]'
+    case '评价': return 'bg-[#eceffd] text-[#4f62a4]'
+    case '优化': return 'bg-[#fff3dc] text-[#8a5a0a]'
+    case '分类聚类': return 'bg-[#f9eaf0] text-[#934762]'
+    case '机器学习': return 'bg-[#f1eafa] text-[#704b96]'
+    case '图论': return 'bg-[#e6f5f5] text-[#24767a]'
+    case '模拟': return 'bg-[#fff0e7] text-[#9a5833]'
+    default: return 'bg-[#edf3f2] text-[#5f7488]'
+  }
+}
+
 /**
  * 方法库浏览器。检索是渲染层本地纯函数（shared/methods.ts），不走 IPC：
  * 卡是随应用打包的静态知识，不需要主进程参与。只有「钉了哪几张」落库。
@@ -73,14 +88,14 @@ export function MethodPanel({ sessionId, stageId, pinned, onPin, onExplain }: Pr
           </div>
         ) : (
           cards.map((m) => (
-            <div key={m.id} className="border-b border-white/5 py-1.5">
+            <div key={m.id} className={'border-b border-white/5 py-1.5 ' + (openId === m.id ? 'rounded-md border-l-2 border-l-[#0f9d8a] bg-[#f8fbfa] px-2' : '')}>
               <button
                 onClick={() => setOpenId(openId === m.id ? null : m.id)}
-                className="flex w-full items-baseline gap-2 text-left"
+                className="flex w-full items-baseline gap-2 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[#72bcae]"
               >
-                <span className="text-[10px] text-white/30">{openId === m.id ? '▾' : '▸'}</span>
-                <span className="text-[12px] text-white/80">{m.name}</span>
-                <span className="ml-auto shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-white/40">
+                <span className="text-[10px] text-[#668095]">{openId === m.id ? '▾' : '▸'}</span>
+                <span className="text-[12px] font-medium text-[#294762]">{m.name}</span>
+                <span className={'ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ' + categoryTone(m.category)}>
                   {m.category}
                 </span>
               </button>

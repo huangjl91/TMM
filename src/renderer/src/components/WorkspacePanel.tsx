@@ -30,6 +30,11 @@ function Row({ label, value, warn }: { label: string; value: string; warn?: bool
   )
 }
 
+function pythonVersion(value: string | null | undefined): string {
+  if (!value) return '探测中…'
+  return value.split(' · ')[0]?.trim() || '已找到'
+}
+
 /**
  * 右侧栏的下半部分：会话、附件、方法库、运行环境、工作区路径。
  *
@@ -145,7 +150,7 @@ export function WorkspacePanel({
 
           <div className="shrink-0 border-t border-white/10 px-4 py-3 text-[11px] leading-5">
             <div className="mb-1 text-xs font-semibold tracking-wide text-white/50">运行环境</div>
-            <Row label="Python" value={runtime?.python ?? '探测中…'} warn={!runtime?.pythonReady} />
+            <Row label="Python" value={pythonVersion(runtime?.python)} warn={!runtime?.pythonReady} />
             <Row label="XeLaTeX" value={runtime?.xelatex ? '已找到' : '未探测到'} warn={!runtime?.xelatex} />
             <Row label="Electron" value={runtime?.electron ?? '-'} />
             <Row label="Node" value={runtime?.node ?? '-'} />

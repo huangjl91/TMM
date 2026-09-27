@@ -27,12 +27,12 @@ export function Explainer({ src, onShown }: Props): ReactNode {
     onShown?.(0)
   }, [src.ref])
   return (
-    <div className="space-y-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06] px-3 py-2">
-      <div className="flex items-baseline gap-2 text-[11px] text-emerald-200/70">
+    <div className="space-y-1.5 rounded-lg border border-[#b9ded5] bg-[#edf8f5] px-3 py-2">
+      <div className="flex items-baseline gap-2 text-[11px] font-medium text-[#28776b]">
         <span>
           {src.kind === 'method' ? '方法卡' : '名词'} · {src.title}（{src.category}）
         </span>
-        <span className="ml-auto text-white/30">讲到第 {String(level + 1)} / {String(TOP + 1)} 层</span>
+        <span className="ml-auto font-normal text-[#718397]">讲到第 {String(level + 1)} / {String(TOP + 1)} 层</span>
       </div>
       <p className="text-[12.5px] leading-5 text-white/85">{e.intuition}</p>
       {level >= 1 ? <p className="text-[12.5px] leading-5 text-white/70">比方：{e.analogy}</p> : null}
@@ -56,7 +56,7 @@ export function Explainer({ src, onShown }: Props): ReactNode {
         {level < TOP ? (
           <button
             onClick={() => expand(level + 1)}
-            className="rounded-lg border border-emerald-500/40 px-2 py-0.5 text-[11.5px] text-emerald-200/90 hover:bg-emerald-500/10"
+            className="rounded-lg border border-[#92cbbf] bg-white px-2 py-0.5 text-[11.5px] font-medium text-[#087568] hover:bg-[#dff2ed]"
           >
             再讲一层
           </button>
@@ -69,7 +69,7 @@ export function Explainer({ src, onShown }: Props): ReactNode {
             只留一句话
           </button>
         ) : null}
-        <span className="text-[11px] text-white/30">这一段是科普，不是本题答案</span>
+        <span className="text-[11px] text-[#61758a]">这一段是科普，不是本题答案</span>
       </div>
     </div>
   )
