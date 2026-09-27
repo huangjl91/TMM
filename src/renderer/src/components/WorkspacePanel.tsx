@@ -153,9 +153,8 @@ export function WorkspacePanel({
 
           <div className="shrink-0 border-t border-white/10 px-4 py-3 text-[11px] leading-5 text-white/35">
             <div className="mb-1 text-xs font-semibold tracking-wide text-white/50">工作区</div>
-            <p>图表、数据文件与 paper.tex 按会话放在：</p>
-            <p className="mt-1 break-all font-mono text-[10px] text-white/45">{runtime?.sandboxRoot ?? '-'}</p>
-            <p className="mt-2">沙箱与论文编译共用这个目录，所以图按文件名就能引用。</p>
+            <p>图表、数据文件与论文草稿按会话保存在本机。</p>
+            <p className="mt-1">代码实验和论文编译使用同一会话目录，生成的图表可以直接按文件名引用。</p>
           </div>
         </div>
       ) : null}
