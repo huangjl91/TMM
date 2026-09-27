@@ -9,6 +9,11 @@ interface Props {
   onChanged: (s: SettingsView) => void
 }
 
+function pythonVersion(value: string | null | undefined): string | null {
+  if (!value) return null
+  return value.split(' · ')[0]?.trim() || null
+}
+
 export function SettingsModal({
   settings,
   providers,
@@ -193,10 +198,11 @@ export function SettingsModal({
         <div className="mt-6 border-t border-white/10 pt-4 text-[11px] leading-5 text-white/40">
           <div>Electron {runtime?.electron} · Node {runtime?.node} · Chrome {runtime?.chrome}</div>
           <div>
-            Python：{runtime?.python ?? <span className="text-amber-300">未探测到</span>} · XeLaTeX：
-            {runtime?.xelatex ?? <span className="text-amber-300">未探测到</span>}
+            Python：{pythonVersion(runtime?.python) ?? <span className="text-amber-300">未探测到</span>}
+            {runtime?.python && !runtime.pythonReady ? <span className="text-amber-300">（依赖不完整）</span> : null}
+            {' · '}XeLaTeX：{runtime?.xelatex ? '已就绪' : <span className="text-amber-300">未探测到</span>}
           </div>
-          <div className="break-all">数据库：{runtime?.dbPath}</div>
+          <div>项目数据：按当前用户保存在本机</div>
           <div className="mt-1">Key 仅在本机经系统加密存储，请求由主进程直发服务商，不经过任何第三方。</div>
         </div>
       </div>
