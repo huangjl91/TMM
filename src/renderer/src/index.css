@@ -115,6 +115,11 @@ button:disabled { cursor: not-allowed; }
 .tmm-light .guided-code-disclosure > summary { color: #35566f !important; font-size: 13px; }
 .tmm-light .guided-code-preview { background: #142331 !important; color: #eef8f5 !important; border: 1px solid #294052; font-size: 13px !important; line-height: 1.65; tab-size: 2; box-shadow: inset 0 1px 0 rgb(255 255 255 / .05); }
 .tmm-light .guided-code-preview::selection,.tmm-light .guided-code-preview *::selection { background: #157f72; color: #fff; }
+.task-card-field.is-missing { border-color: rgb(245 158 11 / .45); background: rgb(245 158 11 / .06); }
+.task-card-field.is-complete { border-color: rgb(16 185 129 / .2); background: rgb(16 185 129 / .035); }
+.task-card-field-status { border-radius: 999px; padding: 2px 7px; font-size: 11px; font-weight: 600; }
+.task-card-field.is-missing .task-card-field-status { background: #fff1cf; color: #8a5a0a; }
+.task-card-field.is-complete .task-card-field-status { background: #def3ec; color: #087568; }
 @keyframes tmm-rise { from { opacity: .65; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 @media (max-width: 1120px) { .tmm-assistant { width: 280px; }.tmm-journey-label { display: none; }.tmm-principle { display: none; } }

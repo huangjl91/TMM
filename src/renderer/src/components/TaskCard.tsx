@@ -102,17 +102,26 @@ export function TaskCard({ stage, card, streaming, injection, questions, focus, 
           ) : null}
           {cells.map((f) => {
             const per = card?.fields.find((c) => c.key === f.key)?.questions
+            const fieldComplete = per?.length
+              ? per.every((q) => (values[qKey(q.idx, f.key)] ?? '').trim())
+              : Boolean((values[f.key] ?? '').trim())
             if (!per?.length) {
               return (
-                <label key={f.key} className="block">
-                  <div className="mb-1 text-xs text-white/60">{f.label}</div>
+                <label key={f.key} className={`task-card-field block rounded-lg border p-2 ${fieldComplete ? 'is-complete' : 'is-missing'}`}>
+                  <div className="mb-1 flex items-center justify-between gap-2 text-xs text-white/60">
+                    <span>{f.label}</span>
+                    <span className="task-card-field-status">{fieldComplete ? '已填写' : '待填写'}</span>
+                  </div>
                   <textarea value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)} rows={3} placeholder={f.hint} className={box} />
                 </label>
               )
             }
             return (
-              <div key={f.key} className="rounded-lg border border-white/10 bg-white/[0.02] p-2">
-                <div className="mb-1.5 text-xs text-white/60">{f.label}</div>
+              <div key={f.key} className={`task-card-field rounded-lg border p-2 ${fieldComplete ? 'is-complete' : 'is-missing'}`}>
+                <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-white/60">
+                  <span>{f.label}</span>
+                  <span className="task-card-field-status">{fieldComplete ? '已填写' : '待补齐'}</span>
+                </div>
                 {per.map((q) => (
                   <label key={q.idx} className="mb-2 block last:mb-0">
                     <div className="mb-1 flex items-baseline gap-2 text-[11px] text-white/40">

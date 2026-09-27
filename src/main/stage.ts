@@ -72,9 +72,21 @@ export function openStage(sessionId: number, stageId: number): { ok: true } | { 
   const states = getStageStates(sessionId)
   const blocker = firstOpenBlocking(states, stageId)
   if (blocker) {
+    const blockerCard = stageCard(sessionId, blocker.id)
+    const missing = blockerCard.fields
+      .filter((field) => field.questions?.length
+        ? field.questions.some((question) => !question.content.trim())
+        : !field.content.trim())
+      .map((field) => field.label)
+    const blockerState = states.get(blocker.id)
+    const nextAction = missing.length
+      ? `请在下方任务卡补齐：${missing.join('、')}`
+      : blockerState?.status === 'submitted'
+        ? '任务卡已经提交，但尚未通过检查；请按教练反馈补充后再次提交'
+        : '任务卡已经填完，请点击「提交给教练评审」完成本阶段'
     return {
       ok: false,
-      error: `第 ${blocker.id} 阶段「${blocker.title}」还没完成，它标了强制项，不能跳过`
+      error: `第 ${blocker.id} 阶段「${blocker.title}」还没完成，暂时不能进入阶段 ${stageId}。${nextAction}`
     }
   }
   upsertStageState(sessionId, stageId, {
