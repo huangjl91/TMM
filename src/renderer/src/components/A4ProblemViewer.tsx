@@ -121,9 +121,9 @@ export function A4ProblemViewer({
   }, [pdfDataUrl])
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0d1017] shadow-lg overflow-hidden transition-all duration-300">
+    <div className="overflow-hidden rounded-xl border border-[#d8e5e2] bg-white shadow-sm transition-all duration-300">
       {/* 顶部工具栏 */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-[#131722] px-4 py-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#d8e5e2] bg-[#f8fbfa] px-4 py-2.5 text-xs">
         <div className="flex items-center gap-2">
           <span className="flex h-5 w-5 items-center justify-center rounded bg-sky-500/20 text-xs font-bold text-sky-400">
             <FileText size={14} weight="duotone" />
@@ -196,7 +196,7 @@ export function A4ProblemViewer({
         ref={containerRef}
         className={`w-full ${
           expanded ? 'h-[720px]' : 'h-[480px]'
-        } overflow-y-auto bg-[#181c25] p-6 flex flex-col items-center gap-6 transition-all select-text`}
+        } overflow-y-auto bg-[#eef3f2] p-6 flex flex-col items-center gap-6 transition-all select-text`}
       >
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full text-white/60 gap-3 py-16">
