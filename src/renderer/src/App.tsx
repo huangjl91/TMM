@@ -68,7 +68,7 @@ export function App(): ReactNode {
   const [viewMode, setViewMode] = useState<'guided' | 'coach'>('guided')
   const [coachOpen, setCoachOpen] = useState(true)
   const [activeNav, setActiveNav] = useState<'path' | 'library'>('path')
-  const [assistantTab, setAssistantTab] = useState<'coach' | 'evidence'>('coach')
+  const [assistantTab, setAssistantTab] = useState<'coach' | 'evidence' | 'resources'>('coach')
 
   const sessionIdRef = useRef<number | null>(null)
   sessionIdRef.current = sessionId
@@ -588,7 +588,7 @@ export function App(): ReactNode {
           onNavigate={(key) => {
             setActiveNav(key)
             if (key === 'path') setViewMode('guided')
-            if (key === 'library') { setAssistantTab('evidence'); setCoachOpen(true) }
+            if (key === 'library') { setAssistantTab('resources'); setCoachOpen(true) }
           }}
         />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -682,6 +682,7 @@ export function App(): ReactNode {
             {coachOpen ? <div className="tmm-assistant-tabs">
               <button onClick={() => setAssistantTab('coach')} className={assistantTab === 'coach' ? 'is-active' : ''}>AI 教练</button>
               <button onClick={() => setAssistantTab('evidence')} className={assistantTab === 'evidence' ? 'is-active' : ''}>证据</button>
+              <button onClick={() => setAssistantTab('resources')} className={assistantTab === 'resources' ? 'is-active' : ''}>资料</button>
             </div> : null}
             <button onClick={() => setCoachOpen((value) => !value)} title={coachOpen ? '收起教练' : '展开教练'}>{coachOpen ? '»' : '«'}</button>
           </div>
@@ -696,7 +697,7 @@ export function App(): ReactNode {
             onSend={onSendFree}
             onAbort={onAbortFree}
             onOpenSettings={() => setShowSettings(true)}
-          /> : <div className="tmm-evidence-panel">
+          /> : assistantTab === 'evidence' ? <div className="tmm-evidence-panel">
             <div className="tmm-evidence-intro">
               <strong>当前证据链</strong>
               <span>所有结论都应能回到来源和运行结果。</span>
@@ -707,6 +708,11 @@ export function App(): ReactNode {
               <div><b>运行证据</b><span>代码、图表和指标将在运行后出现</span></div>
             </div>
             {files.length === 0 ? <button className="tmm-evidence-import" onClick={() => void onIntake()} disabled={intakeBusy}>{intakeBusy ? '正在解析…' : '导入题目与附件'}</button> : null}
+          </div> : <div className="tmm-resources-panel">
+            <div className="tmm-evidence-intro">
+              <strong>项目资料</strong>
+              <span>查看附件、收藏的方法和历史会话。</span>
+            </div>
             <WorkspacePanel
             sessions={sessions}
             activeId={sessionId}
