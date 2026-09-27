@@ -88,6 +88,7 @@ button:disabled { cursor: not-allowed; }
 .tmm-light [class*="border-white/10"],.tmm-light [class*="border-white/15"] { border-color: #dce8e5 !important; }
 .tmm-light .text-white { color: #17324d !important; }
 .tmm-light [class*="text-white/90"],.tmm-light [class*="text-white/80"],.tmm-light [class*="text-white/70"] { color: #294762 !important; }.tmm-light [class*="text-white/60"],.tmm-light [class*="text-white/50"] { color: #61758a !important; }.tmm-light [class*="text-white/40"],.tmm-light [class*="text-white/30"] { color: #82919f !important; }
+.tmm-light [class*="text-white/"] { color: #61758a !important; }
 .tmm-light [class*="text-sky-"],.tmm-light [class*="text-cyan-"] { color: #087568 !important; }.tmm-light [class~="bg-sky-600"],.tmm-light [class~="bg-sky-500"] { background-color: #0f9d8a !important; }.tmm-light [class*="bg-sky-500/"] { background-color: #e5f5f1 !important; }
 .tmm-light [class*="text-amber-100"],.tmm-light [class*="text-amber-200"],.tmm-light [class*="text-amber-300"] { color: #8a5a0a !important; }
 .tmm-light [class*="bg-amber-500/"] { background-color: #fff9ed !important; }

@@ -58,7 +58,7 @@ export function ChatPanel({
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' })
+    if (messages.length > 0) endRef.current?.scrollIntoView({ block: 'end' })
   }, [messages, streaming])
 
   const submit = (): void => {
@@ -69,10 +69,10 @@ export function ChatPanel({
   }
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-[#0f1115]">
-      <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+    <section className={`flex min-w-0 flex-col bg-[#0f1115] ${messages.length > 0 ? 'min-h-72 flex-1' : 'shrink-0'}`}>
+      <div className={`${messages.length > 0 ? 'flex-1' : ''} space-y-4 overflow-y-auto px-5 py-4`}>
         {messages.length === 0 && (
-          <div className="mx-auto mt-12 max-w-lg text-center">
+          <div className="mx-auto max-w-lg text-center">
             <p className="mb-1 text-base text-white/70">从导入赛题开始</p>
             <p className="mb-4 text-sm leading-6 text-white/40">
               选题目 PDF 和附件目录，教练会拿着题面与数据清单逐问问你。正文和代码仍然由你自己写。
