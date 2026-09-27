@@ -147,7 +147,7 @@ export function App(): ReactNode {
       setProviders(p)
       setRuntime(r)
       setSessions(ss)
-      if (!s.hasApiKey) setShowSettings(true)
+      if (ss[0]) await openSession(ss[0].id)
     })().catch((e: unknown) => setError(briefError(e)))
   }, [])
 
@@ -306,7 +306,7 @@ export function App(): ReactNode {
     })
   }, [])
 
-  const openSession = async (id: number): Promise<void> => {
+  async function openSession(id: number): Promise<void> {
     const [stored, free] = await Promise.all([window.api.getSession(id), window.api.freeHistory(id)])
     setSessionId(id)
     setMessages(
@@ -694,7 +694,7 @@ export function App(): ReactNode {
                 <button className={workbenchTab === 'task' ? 'is-active' : ''} onClick={() => setWorkbenchTab('task')}>任务讨论</button>
                 <button className={workbenchTab === 'code' ? 'is-active' : ''} onClick={() => setWorkbenchTab('code')}>代码实验</button>
                 <button className={workbenchTab === 'paper' ? 'is-active' : ''} onClick={() => setWorkbenchTab('paper')}>论文草稿</button>
-                <button className={workbenchTab === 'disclosure' ? 'is-active' : ''} onClick={() => setWorkbenchTab('disclosure')}>使用说明</button>
+                <button className={workbenchTab === 'disclosure' ? 'is-active' : ''} onClick={() => setWorkbenchTab('disclosure')}>操作记录</button>
               </div>
               {workbenchTab === 'task' ? <div className="tmm-task-workbench"><ChatPanel
                 messages={messages}
