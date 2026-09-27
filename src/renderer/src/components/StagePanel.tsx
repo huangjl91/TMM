@@ -19,7 +19,7 @@ export function StagePanel({ stages, currentId, onOpen, activeNav = 'path', onNa
     <div className="tmm-rail-step">{currentId}<small>/ 11</small></div>
     <ol className="tmm-stage-semantics" aria-label="完整建模阶段">
       {stages.map((stage) => <li key={stage.id}>
-        <button onClick={() => onOpen(stage.id)} disabled={stage.locked}>
+        <button onClick={() => onOpen(stage.id)} aria-disabled={stage.locked}>
           {stage.status === 'done' ? '✓' : stage.status === 'active' ? '▶' : '○'} {stage.id} {stage.title}
           {stage.blocking ? ' 强制' : ''}
         </button>
@@ -37,8 +37,10 @@ export function JourneyProgress({ stages, currentId, onOpen }: Props): ReactNode
         <div className="tmm-journey-label"><strong>{group.label}</strong><span>{group.range}</span></div>
         <div className="tmm-journey-dots">{group.ids.map((id) => {
           const stage = stages.find((item) => item.id === id)
-          return <button key={id} onClick={() => onOpen(id)} disabled={stage?.locked} title={`打开阶段任务：${stage?.title ?? id}`}
-            className={id === currentId ? 'is-current' : stage?.status === 'done' ? 'is-done' : ''}>
+          const locked = stage?.locked === true
+          return <button key={id} onClick={() => onOpen(id)} aria-disabled={locked}
+            title={locked ? `阶段 ${id} 尚未解锁；点击查看前置要求` : `打开阶段任务：${stage?.title ?? id}`}
+            className={`${id === currentId ? 'is-current' : stage?.status === 'done' ? 'is-done' : ''}${locked ? ' is-locked' : ''}`}>
             {stage?.status === 'done' ? '✓' : id}
           </button>
         })}</div>
