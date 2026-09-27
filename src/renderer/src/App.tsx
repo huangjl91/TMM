@@ -69,7 +69,7 @@ export function App(): ReactNode {
   const [viewMode, setViewMode] = useState<'guided' | 'coach'>('guided')
   const [coachOpen, setCoachOpen] = useState(true)
   const [activeNav, setActiveNav] = useState<'path' | 'library'>('path')
-  const [assistantTab, setAssistantTab] = useState<'coach' | 'evidence' | 'resources'>('coach')
+  const [assistantTab, setAssistantTab] = useState<'coach' | 'evidence'>('coach')
   const [evidenceRuns, setEvidenceRuns] = useState<RunRecord[]>([])
 
   const sessionIdRef = useRef<number | null>(null)
@@ -599,10 +599,34 @@ export function App(): ReactNode {
           onNavigate={(key) => {
             setActiveNav(key)
             if (key === 'path') setViewMode('guided')
-            if (key === 'library') { setAssistantTab('resources'); setCoachOpen(true) }
+            if (key === 'library') setCoachOpen(true)
           }}
         />
         <div className="flex min-w-0 flex-1 flex-col">
+          {activeNav === 'library' ? <>
+          <div className="tmm-library-head">
+            <div><strong>资料库</strong><span>题目附件、收藏方法与历史项目</span></div>
+            <button onClick={() => { setActiveNav('path'); setViewMode('guided') }}>返回建模路径</button>
+          </div>
+          <main className="tmm-main">
+            <div className="tmm-library-page">
+              <WorkspacePanel
+                sessions={sessions}
+                activeId={sessionId}
+                stageId={stageId}
+                runtime={runtime}
+                pinned={pinned}
+                files={files}
+                onSelect={(id) => void openSession(id)}
+                onNew={newSession}
+                onPin={(m, on) => void onPinMethod(m, on)}
+                onExplain={onExplain}
+                initiallyOpen
+                embedded
+              />
+            </div>
+          </main>
+          </> : <>
           <JourneyProgress stages={stages} currentId={stageId} onOpen={(id) => void onOpenStage(id)} />
           <div className="tmm-viewbar">
             <div className="tmm-viewtabs">
@@ -687,13 +711,13 @@ export function App(): ReactNode {
             </div>
           )}
           </main>
+          </>}
         </div>
         <aside className={`tmm-assistant ${coachOpen ? '' : 'is-collapsed'}`}>
           <div className="tmm-assistant-head">
             {coachOpen ? <div className="tmm-assistant-tabs">
               <button onClick={() => setAssistantTab('coach')} className={assistantTab === 'coach' ? 'is-active' : ''}>AI 教练</button>
               <button onClick={() => setAssistantTab('evidence')} className={assistantTab === 'evidence' ? 'is-active' : ''}>证据</button>
-              <button onClick={() => setAssistantTab('resources')} className={assistantTab === 'resources' ? 'is-active' : ''}>资料</button>
             </div> : null}
             <button onClick={() => setCoachOpen((value) => !value)} title={coachOpen ? '收起教练' : '展开教练'}>{coachOpen ? '»' : '«'}</button>
           </div>
@@ -708,7 +732,7 @@ export function App(): ReactNode {
             onSend={onSendFree}
             onAbort={onAbortFree}
             onOpenSettings={() => setShowSettings(true)}
-          /> : assistantTab === 'evidence' ? <div className="tmm-evidence-panel">
+          /> : <div className="tmm-evidence-panel">
             <div className="tmm-evidence-intro">
               <strong>当前证据链</strong>
               <span>所有结论都应能回到来源和运行结果。</span>
@@ -723,25 +747,7 @@ export function App(): ReactNode {
               <span>{[...evidenceRuns].reverse().flatMap((run) => run.artifacts.map((artifact) => artifact.name)).slice(0, 6).join('、') || '最近运行没有生成文件'}</span>
             </div> : null}
             {files.length === 0 ? <button className="tmm-evidence-import" onClick={() => void onIntake()} disabled={intakeBusy}>{intakeBusy ? '正在解析…' : '导入题目与附件'}</button> : null}
-          </div> : <div className="tmm-resources-panel">
-            <div className="tmm-evidence-intro">
-              <strong>项目资料</strong>
-              <span>查看附件、收藏的方法和历史会话。</span>
-            </div>
-            <WorkspacePanel
-            sessions={sessions}
-            activeId={sessionId}
-            stageId={stageId}
-            runtime={runtime}
-            pinned={pinned}
-            files={files}
-            onSelect={(id) => void openSession(id)}
-            onNew={newSession}
-            onPin={(m, on) => void onPinMethod(m, on)}
-            onExplain={onExplain}
-            initiallyOpen
-            embedded
-          /></div>}
+          </div>}
           </> : null}
         </aside>
       </div>
