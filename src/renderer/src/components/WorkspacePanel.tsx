@@ -17,6 +17,7 @@ interface Props {
   onNew: () => void
   onPin: (m: MethodCard, on: boolean) => void
   onExplain: (src: ExplainSource, level: number) => void
+  initiallyOpen?: boolean
 }
 
 function Row({ label, value, warn }: { label: string; value: string; warn?: boolean }): ReactNode {
@@ -45,9 +46,10 @@ export function WorkspacePanel({
   onSelect,
   onNew,
   onPin,
-  onExplain
+  onExplain,
+  initiallyOpen = false
 }: Props): ReactNode {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(initiallyOpen)
 
   return (
     <div className="flex shrink-0 flex-col border-t border-white/10 bg-[#12141a]">

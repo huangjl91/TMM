@@ -23,6 +23,7 @@ import { NO_QUESTION, type QuestionView } from '@shared/questions'
 import type { MethodCard } from '@shared/methods'
 import type { ExplainSource } from '@shared/explain'
 import type { ProviderPreset, RuntimeInfo, SessionSummary, SettingsView, StreamEvent, TokenUsage } from '@shared/types'
+import type { RunRecord } from '@shared/sandbox'
 
 /** Electron 的 IPC 错误带一层「Error invoking remote method」外壳，学生不需要看这层 */
 function briefError(e: unknown): string {
@@ -69,6 +70,7 @@ export function App(): ReactNode {
   const [coachOpen, setCoachOpen] = useState(true)
   const [activeNav, setActiveNav] = useState<'path' | 'library'>('path')
   const [assistantTab, setAssistantTab] = useState<'coach' | 'evidence' | 'resources'>('coach')
+  const [evidenceRuns, setEvidenceRuns] = useState<RunRecord[]>([])
 
   const sessionIdRef = useRef<number | null>(null)
   sessionIdRef.current = sessionId
@@ -147,6 +149,14 @@ export function App(): ReactNode {
       if (!s.hasApiKey) setShowSettings(true)
     })().catch((e: unknown) => setError(briefError(e)))
   }, [])
+
+  useEffect(() => {
+    if (!sessionId) {
+      setEvidenceRuns([])
+      return
+    }
+    void window.api.listRuns(sessionId).then(setEvidenceRuns).catch(() => setEvidenceRuns([]))
+  }, [sessionId, assistantTab])
 
   useEffect(() => {
     const patchLast = (patch: (m: Msg) => Msg): void => {
@@ -361,6 +371,7 @@ export function App(): ReactNode {
     setIntakeBusy(false)
     setQuestions([])
     setFocus(NO_QUESTION)
+    setEvidenceRuns([])
   }
 
   const onSend = useCallback(
@@ -703,10 +714,14 @@ export function App(): ReactNode {
               <span>所有结论都应能回到来源和运行结果。</span>
             </div>
             <div className="tmm-evidence-kinds">
-              <div><b>来源材料</b><span>{files.length > 0 ? `${files.length} 个附件` : '等待导入题面与数据'}</span></div>
-              <div><b>建模决策</b><span>{sessionId ? `正在记录第 ${stageId} 阶段` : '建立会话后开始记录'}</span></div>
-              <div><b>运行证据</b><span>代码、图表和指标将在运行后出现</span></div>
+              <div><b>来源材料</b><span>{files.length > 0 ? files.map((file) => `${file.name}（${Math.max(1, Math.round(file.size / 1024))} KB）`).join('、') : '等待导入题面与数据'}</span></div>
+              <div><b>建模决策</b><span>{sessionId ? `已完成 ${stages.filter((stage) => stage.status === 'done').length} / 11；当前：${currentStage?.title ?? `阶段 ${stageId}`}` : '建立会话后开始记录'}</span></div>
+              <div><b>运行证据</b><span>{evidenceRuns.length > 0 ? `${evidenceRuns.length} 次运行，${evidenceRuns.filter((run) => run.ok).length} 次成功` : '代码、图表和指标将在运行后出现'}</span></div>
             </div>
+            {evidenceRuns.length > 0 ? <div className="tmm-evidence-artifacts">
+              <b>最近产物</b>
+              <span>{[...evidenceRuns].reverse().flatMap((run) => run.artifacts.map((artifact) => artifact.name)).slice(0, 6).join('、') || '最近运行没有生成文件'}</span>
+            </div> : null}
             {files.length === 0 ? <button className="tmm-evidence-import" onClick={() => void onIntake()} disabled={intakeBusy}>{intakeBusy ? '正在解析…' : '导入题目与附件'}</button> : null}
           </div> : <div className="tmm-resources-panel">
             <div className="tmm-evidence-intro">
@@ -724,6 +739,7 @@ export function App(): ReactNode {
             onNew={newSession}
             onPin={(m, on) => void onPinMethod(m, on)}
             onExplain={onExplain}
+            initiallyOpen
           /></div>}
           </> : null}
         </aside>
