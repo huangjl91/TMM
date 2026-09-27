@@ -14,6 +14,10 @@ console.log('— 引导式解题引擎 (Guided Quiz Engine) 单元测试 —')
 
 // 1. 题型识别测试
 assert.equal(detectProblemCategory('针对不同配送中心进行最优化调度与路径规划，使总成本最低'), 'optimization')
+assert.equal(
+  detectProblemCategory('给出该乡村 2024~2030 年农作物的最优种植方案，并满足地块轮作与豆类覆盖约束'),
+  'optimization'
+)
 assert.equal(detectProblemCategory('对各企业进行综合评价打分与排名优选'), 'evaluation')
 assert.equal(detectProblemCategory('根据过去三年历史数据预测未来三个月的用电负荷变化走势'), 'prediction')
 console.log('PASS  题目类型自动识别 (运筹规划 / 综合评价 / 时序预测)')

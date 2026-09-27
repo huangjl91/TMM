@@ -104,25 +104,29 @@ function loadOrGenerateAnalysis(
         const questions = enforceEvidenceSafeQuestions(
           JSON.parse(cached.questionsJson) as Record<GuidedStep, GuidedQuestion>
         )
-        const candidateModels = buildDefaultGuidedQuestions(
-          questionIdx,
-          brief,
-          fullText,
-          categoryOverride ?? detected.detected
-        ).candidateModels
-        return {
-          knowledge,
-          questions,
-          elements: rawElements,
-          candidateModels,
-          brief,
-          sourceReady,
-          categoryAssessment: {
-            ...detected,
-            active: categoryOverride ?? detected.detected,
-            overridden: Boolean(categoryOverride)
+        const effectiveCategory = categoryOverride ?? detected.detected
+        if (knowledge.category === effectiveCategory) {
+          const candidateModels = buildDefaultGuidedQuestions(
+            questionIdx,
+            brief,
+            fullText,
+            effectiveCategory
+          ).candidateModels
+          return {
+            knowledge,
+            questions,
+            elements: rawElements,
+            candidateModels,
+            brief,
+            sourceReady,
+            categoryAssessment: {
+              ...detected,
+              active: effectiveCategory,
+              overridden: Boolean(categoryOverride)
+            }
           }
         }
+        clearGuidedChoices(sessionId, questionIdx)
       }
       if (rawElements._sourceFingerprint !== sourceFingerprint) {
         clearGuidedChoices(sessionId, questionIdx)

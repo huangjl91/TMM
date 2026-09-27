@@ -325,7 +325,7 @@ export function extractProblemElements(questionText: string, fullProblemText = '
 export function detectProblemCategory(text: string): ProblemKnowledge['category'] {
   const t = text.toLowerCase()
   if (
-    /微网|电力|规划|调度|路径|分配|最大化|最小化|成本最低|效益最高|最优化|背包|排班|指派|milp|lp|optimiz/i.test(
+    /微网|电力|规划|调度|路径|分配|最大化|最小化|成本最低|效益最高|最优|种植策略|种植方案|地块|轮作|决策变量|整数规划|线性规划|背包|排班|指派|milp|lp|optimiz/i.test(
       t
     )
   ) {
@@ -351,7 +351,7 @@ export function explainProblemCategory(text: string): Omit<CategoryAssessment, '
   const detected: GuidedCategory =
     detectedRaw === 'optimization' || detectedRaw === 'evaluation' ? detectedRaw : 'prediction'
   const patterns: Record<GuidedCategory, RegExp> = {
-    optimization: /微网|调度|路径|分配|最大化|最小化|成本|效益|约束|规划|指派/gi,
+    optimization: /微网|调度|路径|分配|最大化|最小化|最优|种植策略|种植方案|地块|轮作|成本|效益|约束|规划|指派/gi,
     prediction: /预测|趋势|未来|走势|时序|时间序列|外推|回归|拟合|残差|动态|微分/gi,
     evaluation: /评价|打分|排序|优选|权重|指标|topsis|熵权|层次分析|ahp/gi
   }
