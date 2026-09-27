@@ -19,10 +19,10 @@ function windowIcon(): string | undefined {
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 640,
+    width: 1180,
+    height: 740,
+    minWidth: 960,
+    minHeight: 620,
     show: false,
     title: '数学建模教练',
     icon: windowIcon(),
