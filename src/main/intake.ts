@@ -136,7 +136,11 @@ async function pick(): Promise<string[]> {
   const options: Electron.OpenDialogOptions = {
     title: '导入赛题与附件',
     buttonLabel: '导入',
-    properties: ['openFile', 'openDirectory', 'multiSelections']
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: '赛题与数据文件', extensions: ['pdf', 'doc', 'docx', 'txt', 'md', 'xlsx', 'xls', 'csv', 'tsv'] },
+      { name: '所有文件', extensions: ['*'] }
+    ]
   }
   const r = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
   if (r.canceled) return []
