@@ -627,7 +627,15 @@ export function App(): ReactNode {
             </div>
           </main>
           </> : <>
-          <JourneyProgress stages={stages} currentId={stageId} onOpen={(id) => void onOpenStage(id)} />
+          <JourneyProgress
+            stages={stages}
+            currentId={stageId}
+            onOpen={(id) => {
+              void onOpenStage(id)
+              setActiveNav('path')
+              setViewMode('coach')
+            }}
+          />
           <div className="tmm-viewbar">
             <div className="tmm-viewtabs">
               <button

@@ -37,7 +37,7 @@ export function JourneyProgress({ stages, currentId, onOpen }: Props): ReactNode
         <div className="tmm-journey-label"><strong>{group.label}</strong><span>{group.range}</span></div>
         <div className="tmm-journey-dots">{group.ids.map((id) => {
           const stage = stages.find((item) => item.id === id)
-          return <button key={id} onClick={() => onOpen(id)} disabled={stage?.locked} title={stage?.title}
+          return <button key={id} onClick={() => onOpen(id)} disabled={stage?.locked} title={`打开阶段任务：${stage?.title ?? id}`}
             className={id === currentId ? 'is-current' : stage?.status === 'done' ? 'is-done' : ''}>
             {stage?.status === 'done' ? '✓' : id}
           </button>
