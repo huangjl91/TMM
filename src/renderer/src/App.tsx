@@ -740,6 +740,7 @@ export function App(): ReactNode {
             onPin={(m, on) => void onPinMethod(m, on)}
             onExplain={onExplain}
             initiallyOpen
+            embedded
           /></div>}
           </> : null}
         </aside>
