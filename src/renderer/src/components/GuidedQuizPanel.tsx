@@ -61,6 +61,8 @@ export function GuidedQuizPanel({
   const [generatedImgUrl, setGeneratedImgUrl] = useState<string | null>(null)
   const [reanalyzing, setReanalyzing] = useState(false)
   const [categoryUpdating, setCategoryUpdating] = useState(false)
+  const [choiceSaving, setChoiceSaving] = useState(false)
+  const [choiceStatus, setChoiceStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [problemFile, setProblemFile] = useState<ProblemFileContent | null>(null)
   const [pdfExpanded, setPdfExpanded] = useState(false)
   const [selectedDataRelPath, setSelectedDataRelPath] = useState('')
@@ -239,6 +241,7 @@ export function GuidedQuizPanel({
     setSelectedKey(prev ? prev.pickedKey : '')
     setUserNote(prev?.userNote ?? '')
     setAiAdvice(null)
+    setChoiceStatus(null)
   }
 
   // 听听 AI 导师怎么看
@@ -272,9 +275,12 @@ export function GuidedQuizPanel({
 
   // 确认当前选择并进入下一步
   const handleConfirmChoice = async (): Promise<void> => {
-    if (!selectedKey) return
+    if (!selectedKey || choiceSaving) return
     const opt = curQ.options.find((o) => o.key === selectedKey)
     if (!opt) return
+
+    setChoiceSaving(true)
+    setChoiceStatus(null)
 
     const choice: StepChoice = {
       pickedKey: opt.key,
@@ -284,8 +290,8 @@ export function GuidedQuizPanel({
       timestamp: Date.now()
     }
 
-    if (sessionId) {
-      try {
+    try {
+      if (sessionId) {
         const nextState = await window.api.chooseGuidedStep({
           sessionId,
           questionIdx: currentQIdx,
@@ -296,26 +302,33 @@ export function GuidedQuizPanel({
           userNote: choice.userNote
         })
         setState(nextState)
-      } catch (e) {
-        console.error('Failed to save choice:', e)
+      } else {
+        setState((prev) => {
+          if (!prev) return prev
+          const nextChoices = { ...prev.choices, [activeStep]: choice }
+          return {
+            ...prev,
+            choices: nextChoices,
+            completed: GUIDED_STEPS.every((s) => Boolean(nextChoices[s.key]))
+          }
+        })
       }
-    } else {
-      setState((prev) => {
-        if (!prev) return prev
-        const nextChoices = { ...prev.choices, [activeStep]: choice }
-        return {
-          ...prev,
-          choices: nextChoices,
-          completed: GUIDED_STEPS.every((s) => Boolean(nextChoices[s.key]))
-        }
-      })
-    }
 
-    // 自动切到下一个未完成 step
-    const steps: GuidedStep[] = ['intuition', 'model_select', 'formulation', 'visualization']
-    const curIdx = steps.indexOf(activeStep)
-    if (curIdx < steps.length - 1) {
-      handleStepChange(steps[curIdx + 1] as GuidedStep)
+      const steps: GuidedStep[] = ['intuition', 'model_select', 'formulation', 'visualization']
+      const curIdx = steps.indexOf(activeStep)
+      if (curIdx < steps.length - 1) {
+        handleStepChange(steps[curIdx + 1] as GuidedStep)
+      } else {
+        setChoiceStatus({ ok: true, text: '4 步选择已完成，解题蓝图已生成' })
+        window.setTimeout(() => {
+          document.getElementById('guided-solution-blueprint')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 120)
+      }
+    } catch (e) {
+      console.error('Failed to save choice:', e)
+      setChoiceStatus({ ok: false, text: `保存失败：${(e as Error).message || '请重试'}` })
+    } finally {
+      setChoiceSaving(false)
     }
   }
 
@@ -834,7 +847,7 @@ export function GuidedQuizPanel({
           </div>
 
           {/* 用户做决策与确认 */}
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex flex-wrap items-center gap-3 pt-2">
             <input
               type="text"
               value={userNote}
@@ -844,11 +857,27 @@ export function GuidedQuizPanel({
             />
             <button
               onClick={handleConfirmChoice}
-              disabled={!selectedKey}
+              disabled={!selectedKey || choiceSaving}
               className="rounded-xl bg-sky-600 px-5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-sky-500 disabled:opacity-40"
             >
-              ✓ 确认选择并进入下一步
+              {choiceSaving
+                ? '正在保存…'
+                : activeStep === 'visualization'
+                  ? '✓ 完成选择并查看解题蓝图'
+                  : '✓ 确认选择并进入下一步'}
             </button>
+            {choiceStatus ? (
+              <div
+                role="status"
+                className={`w-full rounded-lg border px-3 py-2 text-xs font-medium ${
+                  choiceStatus.ok
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                    : 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+                }`}
+              >
+                {choiceStatus.ok ? '✓ ' : ''}{choiceStatus.text}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -1094,7 +1123,7 @@ export function GuidedQuizPanel({
 
         {/* 方案统合与一键同步任务卡 */}
         {state?.generatedDraft ? (
-          <div className="rounded-xl border border-white/10 bg-[#161a23] p-5 shadow-sm space-y-3">
+          <div id="guided-solution-blueprint" className="scroll-mt-4 rounded-xl border border-white/10 bg-[#161a23] p-5 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-white">
