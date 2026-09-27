@@ -67,6 +67,7 @@ export function App(): ReactNode {
   const [questions, setQuestions] = useState<QuestionView[]>([])
   const [focus, setFocus] = useState(NO_QUESTION)
   const [viewMode, setViewMode] = useState<'guided' | 'coach'>('guided')
+  const [workbenchTab, setWorkbenchTab] = useState<'task' | 'code' | 'paper' | 'disclosure'>('task')
   const [coachOpen, setCoachOpen] = useState(true)
   const [activeNav, setActiveNav] = useState<'path' | 'library'>('path')
   const [assistantTab, setAssistantTab] = useState<'coach' | 'evidence'>('coach')
@@ -677,7 +678,13 @@ export function App(): ReactNode {
             </div>
           ) : (
             <div className="tmm-coach-flow">
-              <ChatPanel
+              <div className="tmm-workbench-tabs" role="tablist" aria-label="阶段工作工具">
+                <button className={workbenchTab === 'task' ? 'is-active' : ''} onClick={() => setWorkbenchTab('task')}>任务讨论</button>
+                <button className={workbenchTab === 'code' ? 'is-active' : ''} onClick={() => setWorkbenchTab('code')}>代码实验</button>
+                <button className={workbenchTab === 'paper' ? 'is-active' : ''} onClick={() => setWorkbenchTab('paper')}>论文草稿</button>
+                <button className={workbenchTab === 'disclosure' ? 'is-active' : ''} onClick={() => setWorkbenchTab('disclosure')}>使用说明</button>
+              </div>
+              {workbenchTab === 'task' ? <div className="tmm-task-workbench"><ChatPanel
                 messages={messages}
                 streaming={streaming}
                 error={error}
@@ -702,8 +709,8 @@ export function App(): ReactNode {
                 focus={focus}
                 onFocus={(idx) => void onFocusQuestion(idx)}
                 onSubmit={(values) => void onSubmitCard(values)}
-              />
-              <CodePanel
+              /></div> : null}
+              {workbenchTab === 'code' ? <CodePanel
                 sessionId={sessionId}
                 stageId={stageId}
                 onSend={onSend}
@@ -713,9 +720,9 @@ export function App(): ReactNode {
                   setSessionId(id)
                   void loadStage(id)
                 }}
-              />
-              <PaperPanel sessionId={sessionId} />
-              <CompliancePanel sessionId={sessionId} stageId={stageId} />
+              /> : null}
+              {workbenchTab === 'paper' ? <PaperPanel sessionId={sessionId} /> : null}
+              {workbenchTab === 'disclosure' ? <CompliancePanel sessionId={sessionId} stageId={stageId} /> : null}
             </div>
           )}
           </main>
