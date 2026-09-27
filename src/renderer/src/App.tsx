@@ -354,7 +354,7 @@ export function App(): ReactNode {
   }
 
   const newSession = (): void => {
-    if (streaming) return
+    if (streaming || freeStreaming) return
     setSessionId(null)
     setMessages([])
     setError(null)
@@ -652,7 +652,19 @@ export function App(): ReactNode {
                 自由探究
               </button>
             </div>
-            <span>{viewMode === 'guided' ? '一次只完成一个判断，需要时再展开依据' : '围绕当前阶段讨论并完成任务卡'}</span>
+            <div className="tmm-view-actions">
+              <span>{viewMode === 'guided' ? '一次只完成一个判断，需要时再展开依据' : '围绕当前阶段讨论并完成任务卡'}</span>
+              <button
+                disabled={streaming || freeStreaming}
+                onClick={() => {
+                  newSession()
+                  setActiveNav('path')
+                  setViewMode('guided')
+                }}
+              >
+                开始新题
+              </button>
+            </div>
           </div>
           <main className="tmm-main">
           {viewMode === 'guided' ? (
