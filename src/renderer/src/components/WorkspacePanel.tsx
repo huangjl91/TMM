@@ -60,7 +60,7 @@ export function WorkspacePanel({
   const visible = embedded || open
 
   return (
-    <div className={embedded ? 'flex min-h-0 flex-1 flex-col bg-[#12141a]' : 'flex shrink-0 flex-col border-t border-white/10 bg-[#12141a]'}>
+    <div className={embedded ? 'flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#12141a]' : 'flex shrink-0 flex-col border-t border-white/10 bg-[#12141a]'}>
       {!embedded ? <button
         onClick={() => setOpen(!open)}
         title={open ? '收起工作区' : '展开会话、附件、方法库与运行环境'}
@@ -73,7 +73,7 @@ export function WorkspacePanel({
       </button> : null}
 
       {visible ? (
-        <div className={embedded ? 'flex min-h-0 flex-1 flex-col' : 'flex h-[46vh] min-h-0 flex-col border-t border-white/5'}>
+        <div className={embedded ? 'flex shrink-0 flex-col' : 'flex h-[46vh] min-h-0 flex-col border-t border-white/5'}>
           <div className="flex items-center justify-between border-b border-white/5 px-4 py-2">
             <span className="text-[11px] font-semibold tracking-wide text-white/40">会话</span>
             <button onClick={onNew} className="text-[11px] text-sky-300/80 hover:text-sky-200">
@@ -140,13 +140,15 @@ export function WorkspacePanel({
             </div>
           ) : null}
 
-          <MethodPanel
-            sessionId={activeId}
-            stageId={stageId}
-            pinned={pinned}
-            onPin={onPin}
-            onExplain={onExplain}
-          />
+          <div className={embedded ? 'flex h-[420px] min-h-[320px] shrink-0' : 'flex min-h-0 flex-1'}>
+            <MethodPanel
+              sessionId={activeId}
+              stageId={stageId}
+              pinned={pinned}
+              onPin={onPin}
+              onExplain={onExplain}
+            />
+          </div>
 
           <div className="shrink-0 border-t border-white/10 px-4 py-3 text-[11px] leading-5">
             <div className="mb-1 text-xs font-semibold tracking-wide text-white/50">运行环境</div>
