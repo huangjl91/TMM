@@ -1,5 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ChartBar, FileText, UploadSimple } from '@phosphor-icons/react'
+import {
+  Brain, ChartBar, FileText, HourglassMedium, Lightbulb, Lightning, ListBullets,
+  Package, PushPin, Robot, RocketLaunch, SpinnerGap, Target, TrendUp, UploadSimple, Warning
+} from '@phosphor-icons/react'
 import {
   GUIDED_STEPS,
   buildDefaultGuidedQuestions,
@@ -499,7 +502,7 @@ export function GuidedQuizPanel({
                 className="flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/15 px-2.5 py-1 text-xs font-medium text-sky-200 transition-all hover:bg-sky-500/25 disabled:opacity-40"
                 title="重新结合赛题全文与出题人意图进行第一性原理解构"
               >
-                <span>{reanalyzing ? '⏳' : '🧠'}</span>
+                {reanalyzing ? <HourglassMedium size={14} /> : <Brain size={14} />}
                 <span>{reanalyzing ? '正在深度解构题目中...' : '重新深度解构本问'}</span>
               </button>
               <button
@@ -561,20 +564,20 @@ export function GuidedQuizPanel({
           {state?.elements ? (
             <div className="rounded-lg border border-sky-500/20 bg-[#121620] p-3 text-xs space-y-2.5">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-300">
-                <span>📋</span>
+                <ListBullets size={15} />
                 <span>赛题深度解构与核心要素看板</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                 <div className="rounded-md border border-white/5 bg-black/25 p-2.5 space-y-1">
                   <div className="font-medium text-amber-300 flex items-center gap-1">
-                    <span>🎯</span>
+                    <Target size={14} />
                     <span>核心攻关目标</span>
                   </div>
                   <p className="text-white/80 leading-relaxed text-[11px]">{state.elements.coreTarget}</p>
                 </div>
                 <div className="rounded-md border border-white/5 bg-black/25 p-2.5 space-y-1">
                   <div className="font-medium text-sky-300 flex items-center gap-1">
-                    <span>📊</span>
+                    <ChartBar size={14} />
                     <span>关键输入与附件数据</span>
                   </div>
                   <ul className="list-disc space-y-0.5 pl-3.5 text-white/70 text-[11px] leading-relaxed">
@@ -585,7 +588,7 @@ export function GuidedQuizPanel({
                 </div>
                 <div className="rounded-md border border-white/5 bg-black/25 p-2.5 space-y-1">
                   <div className="font-medium text-rose-300 flex items-center gap-1">
-                    <span>⚡</span>
+                    <Lightning size={14} />
                     <span>物理机理与硬性约束</span>
                   </div>
                   <ul className="list-disc space-y-0.5 pl-3.5 text-white/70 text-[11px] leading-relaxed">
@@ -596,7 +599,7 @@ export function GuidedQuizPanel({
                 </div>
                 <div className="rounded-md border border-white/5 bg-black/25 p-2.5 space-y-1">
                   <div className="font-medium text-emerald-300 flex items-center gap-1">
-                    <span>📦</span>
+                    <Package size={14} />
                     <span>交付成果与规范表格</span>
                   </div>
                   <ul className="list-disc space-y-0.5 pl-3.5 text-white/70 text-[11px] leading-relaxed">
@@ -612,15 +615,15 @@ export function GuidedQuizPanel({
           {/* 可折叠的考察知识点卡片 */}
           {showKnowledge && state?.knowledge ? (
             <div className="mt-3 space-y-2 rounded-lg border border-sky-500/20 bg-sky-500/[0.04] p-3 text-xs leading-5 text-sky-100/90">
-              <div className="font-medium text-sky-300">💡 核心数学本质</div>
+              <div className="flex items-center gap-1 font-medium text-sky-300"><Lightbulb size={14} />核心数学本质</div>
               <p className="text-white/80">{state.knowledge.mathEssence}</p>
-              <div className="font-medium text-sky-300">📌 评审关键机理点</div>
+              <div className="flex items-center gap-1 font-medium text-sky-300"><PushPin size={14} />评审关键机理点</div>
               <ul className="list-disc space-y-0.5 pl-4 text-white/75">
                 {state.knowledge.keyPrinciples.map((kp, i) => (
                   <li key={i}>{kp}</li>
                 ))}
               </ul>
-              <div className="font-medium text-amber-300">⚠️ 历年常见失分陷阱</div>
+              <div className="flex items-center gap-1 font-medium text-amber-300"><Warning size={14} />历年常见失分陷阱</div>
               <ul className="list-disc space-y-0.5 pl-4 text-amber-200/80">
                 {state.knowledge.commonPitfalls.map((cp, i) => (
                   <li key={i}>{cp}</li>
@@ -770,7 +773,7 @@ export function GuidedQuizPanel({
                   : 'border-violet-500/30 bg-violet-600/20 text-violet-200 hover:border-violet-500/60 hover:bg-violet-600/30 shadow-sm'
               }`}
             >
-              <span>{aiLoading ? '🔄' : '🤖'}</span>
+              {aiLoading ? <SpinnerGap size={15} className="animate-spin" /> : <Robot size={15} />}
               <span>
                 {aiLoading
                   ? '正在深度分析题意与选项利弊...'
@@ -785,7 +788,7 @@ export function GuidedQuizPanel({
               <div className="mt-3 space-y-3 rounded-xl border border-violet-500/30 bg-violet-950/20 p-4 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="flex h-5 w-5 items-center justify-center rounded-md bg-violet-500/30 text-xs">
-                    💡
+                    <Lightbulb size={14} />
                   </span>
                   <span className="font-semibold text-violet-200">AI 导师推荐方案：</span>
                   <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-300">
@@ -868,7 +871,7 @@ export function GuidedQuizPanel({
                   disabled={sandboxRunning || !effectiveVisualizationCode}
                   className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
                 >
-                  <span>{sandboxRunning ? '⏳' : '🚀'}</span>
+                  {sandboxRunning ? <HourglassMedium size={14} /> : <RocketLaunch size={14} />}
                   <span>{sandboxRunning ? '正在沙箱中运行...' : '运行数据检查'}</span>
                 </button>
                 {state?.categoryAssessment.active === 'prediction' ? (
@@ -877,7 +880,7 @@ export function GuidedQuizPanel({
                     disabled={sandboxRunning || !effectivePredictionCode}
                     className="flex items-center gap-1.5 rounded-lg border border-sky-400/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-100 hover:bg-sky-500/25 disabled:opacity-50"
                   >
-                    <span>📈</span>
+                    <TrendUp size={14} />
                     <span>{sandboxRunning ? '正在沙箱中运行...' : '运行模型比较'}</span>
                   </button>
                 ) : null}
@@ -1105,7 +1108,7 @@ export function GuidedQuizPanel({
                 onClick={handleSyncToTasks}
                 className="flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-200 hover:bg-sky-500/20"
               >
-                <span>📌</span>
+                <PushPin size={14} />
                 <span>同步至任务卡与写作提纲</span>
               </button>
             </div>

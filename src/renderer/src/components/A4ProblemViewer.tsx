@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import * as pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs'
+import { ArrowSquareOut, ArrowsIn, ArrowsOut, FileText, SpinnerGap, Tray, Warning } from '@phosphor-icons/react'
 
 // 将 WorkerMessageHandler 挂载至全局，彻底免除外部 Worker 文件寻址与 file:// 跨域限制
 if (typeof window !== 'undefined') {
@@ -125,7 +126,7 @@ export function A4ProblemViewer({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-[#131722] px-4 py-2.5 text-xs">
         <div className="flex items-center gap-2">
           <span className="flex h-5 w-5 items-center justify-center rounded bg-sky-500/20 text-xs font-bold text-sky-400">
-            📄
+            <FileText size={14} weight="duotone" />
           </span>
           <span className="font-semibold text-white">赛题 A4 原件视窗</span>
           {fileName ? (
@@ -172,7 +173,7 @@ export function A4ProblemViewer({
             className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-white/70 hover:bg-white/10 hover:text-white transition-all"
             title={expanded ? '还原默认高度 (480px)' : '放大视窗高度 (700px)'}
           >
-            <span>{expanded ? '⤡' : '⤢'}</span>
+            {expanded ? <ArrowsIn size={14} /> : <ArrowsOut size={14} />}
             <span>{expanded ? '默认高度' : '放大视窗'}</span>
           </button>
 
@@ -183,7 +184,7 @@ export function A4ProblemViewer({
               className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10 hover:text-white transition-all"
               title="在系统默认 PDF 阅读器中打开原始文件"
             >
-              <span>↗️</span>
+              <ArrowSquareOut size={14} />
               <span>系统打开</span>
             </button>
           ) : null}
@@ -199,12 +200,12 @@ export function A4ProblemViewer({
       >
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full text-white/60 gap-3 py-16">
-            <span className="text-2xl animate-spin">⏳</span>
+            <SpinnerGap size={24} className="animate-spin" />
             <span className="text-xs">正在高保真渲染 A4 试题原件...</span>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-full text-amber-200/80 gap-2 py-16">
-            <span>⚠️ {error}</span>
+            <span className="flex items-center gap-1.5"><Warning size={16} weight="fill" />{error}</span>
             <span className="text-xs text-white/40">可点击右上角「系统打开」直接查看原件文件</span>
           </div>
         ) : renderedPages.length > 0 ? (
@@ -231,7 +232,7 @@ export function A4ProblemViewer({
           ))
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-white/40 gap-3 py-16">
-            <span className="text-3xl">📥</span>
+            <Tray size={30} weight="duotone" />
             <span className="text-xs">尚未检测到赛题 PDF 文件，请点击顶部「导入赛题与附件」导入题目。</span>
           </div>
         )}
