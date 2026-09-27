@@ -9,6 +9,7 @@ import { JourneyProgress, StagePanel } from './components/StagePanel'
 import { TaskCard, type Injection } from './components/TaskCard'
 import { WorkspacePanel } from './components/WorkspacePanel'
 import { GuidedQuizPanel } from './components/GuidedQuizPanel'
+import { SessionHistoryPanel } from './components/SessionHistoryPanel'
 import {
   extractStringField,
   parseCoachReply,
@@ -69,7 +70,7 @@ export function App(): ReactNode {
   const [viewMode, setViewMode] = useState<'guided' | 'coach'>('guided')
   const [workbenchTab, setWorkbenchTab] = useState<'task' | 'code' | 'paper' | 'disclosure'>('task')
   const [coachOpen, setCoachOpen] = useState(true)
-  const [activeNav, setActiveNav] = useState<'path' | 'library'>('path')
+  const [activeNav, setActiveNav] = useState<'path' | 'history' | 'library'>('path')
   const [assistantTab, setAssistantTab] = useState<'coach' | 'evidence'>('coach')
   const [evidenceRuns, setEvidenceRuns] = useState<RunRecord[]>([])
 
@@ -604,7 +605,29 @@ export function App(): ReactNode {
           }}
         />
         <div className="flex min-w-0 flex-1 flex-col">
-          {activeNav === 'library' ? <>
+          {activeNav === 'history' ? <>
+          <div className="tmm-library-head">
+            <div><strong>历史建模</strong><span>找到以前的题目并继续上次进度</span></div>
+            <button onClick={() => { setActiveNav('path'); setViewMode('guided') }}>返回建模路径</button>
+          </div>
+          <main className="tmm-main">
+            <SessionHistoryPanel
+              sessions={sessions}
+              activeId={sessionId}
+              onSelect={(id) => {
+                void openSession(id).then(() => {
+                  setActiveNav('path')
+                  setViewMode('guided')
+                })
+              }}
+              onNew={() => {
+                newSession()
+                setActiveNav('path')
+                setViewMode('guided')
+              }}
+            />
+          </main>
+          </> : activeNav === 'library' ? <>
           <div className="tmm-library-head">
             <div><strong>资料库</strong><span>题目附件、收藏方法与历史项目</span></div>
             <button onClick={() => { setActiveNav('path'); setViewMode('guided') }}>返回建模路径</button>

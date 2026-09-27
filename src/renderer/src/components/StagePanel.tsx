@@ -1,8 +1,8 @@
 import { type ReactNode } from 'react'
-import { Books, Path } from '@phosphor-icons/react'
+import { Books, ClockCounterClockwise, Path } from '@phosphor-icons/react'
 import type { StageView } from '@shared/agent'
 
-type NavKey = 'path' | 'library'
+type NavKey = 'path' | 'history' | 'library'
 interface Props { stages: StageView[]; currentId: number; onOpen: (stageId: number) => void; activeNav?: NavKey; onNavigate?: (key: NavKey) => void }
 const groups = [
   { label: '问题理解', range: '1–3', ids: [1, 2, 3] },
@@ -14,6 +14,7 @@ export function StagePanel({ stages, currentId, onOpen, activeNav = 'path', onNa
   return <aside className="tmm-rail" aria-label="主导航">
     <div className="tmm-rail-brand">T</div>
     <button onClick={() => onNavigate?.('path')} className={`tmm-rail-item ${activeNav === 'path' ? 'is-active' : ''}`} title="建模路径"><Path size={20} weight="duotone" /><small>建模路径</small></button>
+    <button onClick={() => onNavigate?.('history')} className={`tmm-rail-item ${activeNav === 'history' ? 'is-active' : ''}`} title="历史建模"><ClockCounterClockwise size={20} weight="regular" /><small>历史</small></button>
     <button onClick={() => onNavigate?.('library')} className={`tmm-rail-item ${activeNav === 'library' ? 'is-active' : ''}`} title="资料库"><Books size={20} weight="regular" /><small>资料</small></button>
     <div className="tmm-rail-spacer" />
     <div className="tmm-rail-step">{currentId}<small>/ 11</small></div>
