@@ -1,5 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import katex from 'katex'
+import {
+  Brain, ChartBar, CheckCircle, Code, Gear, Lightbulb, Lightning, ListBullets,
+  NotePencil, Prohibit, PushPin, RocketLaunch, Ruler, Target, Warning
+} from '@phosphor-icons/react'
 import type { CandidateModelInfo } from '@shared/guidedQuiz'
 
 interface Props {
@@ -41,7 +45,7 @@ export function CandidateModelLecture({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
         <div className="flex items-center gap-2">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-sky-500 to-indigo-600 text-sm shadow">
-            🧠
+            <Brain size={16} weight="duotone" />
           </span>
           <div>
             <div className="flex items-center gap-2">
@@ -61,7 +65,7 @@ export function CandidateModelLecture({
             onClick={onStartQuiz}
             className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-all hover:bg-emerald-500/25 shadow-sm"
           >
-            <span>✍️</span>
+            <NotePencil size={14} />
             <span>进入本问 4 阶梯实操选择题</span>
             <span>↓</span>
           </button>
@@ -148,7 +152,7 @@ export function CandidateModelLecture({
                     : 'text-white/60 hover:text-white'
                 }`}
               >
-                📐 模型公式是什么
+                <span className="flex items-center gap-1"><Ruler size={14} />模型公式是什么</span>
               </button>
               <button
                 onClick={() => setActiveTab('scenarios')}
@@ -158,7 +162,7 @@ export function CandidateModelLecture({
                     : 'text-white/60 hover:text-white'
                 }`}
               >
-                🎯 适用场景与判断
+                <span className="flex items-center gap-1"><Target size={14} />适用场景与判断</span>
               </button>
               <button
                 onClick={() => setActiveTab('mapping')}
@@ -168,7 +172,7 @@ export function CandidateModelLecture({
                     : 'text-white/60 hover:text-white'
                 }`}
               >
-                💻 赛题附件落地
+                <span className="flex items-center gap-1"><Code size={14} />赛题附件落地</span>
               </button>
               <button
                 onClick={() => setActiveTab('pitfalls')}
@@ -178,7 +182,7 @@ export function CandidateModelLecture({
                     : 'text-white/60 hover:text-white'
                 }`}
               >
-                ⚠️ 评委避坑指南
+                <span className="flex items-center gap-1"><Warning size={14} />评委避坑指南</span>
               </button>
             </div>
           </div>
@@ -190,7 +194,7 @@ export function CandidateModelLecture({
               {currentModel.mathFormulation.variables.length > 0 ? (
                 <div className="space-y-1.5">
                   <div className="font-semibold text-sky-300 text-xs flex items-center gap-1.5">
-                    <span>📋</span>
+                    <ListBullets size={14} />
                     <span>决策变量与物理量符号说明</span>
                   </div>
                   <div className="overflow-x-auto rounded-lg border border-white/10 bg-black/30">
@@ -226,7 +230,7 @@ export function CandidateModelLecture({
               <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.04] p-3.5">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-amber-300 text-xs flex items-center gap-1.5">
-                    <span>🎯</span>
+                    <Target size={14} />
                     <span>目标函数 (Objective Function)</span>
                   </span>
                   <span className="text-[10px] text-amber-200/60 font-mono">LaTeX / KaTeX 严密表达</span>
@@ -244,7 +248,7 @@ export function CandidateModelLecture({
               {currentModel.mathFormulation.constraints.length > 0 ? (
                 <div className="space-y-2">
                   <div className="font-semibold text-sky-300 text-xs flex items-center gap-1.5">
-                    <span>⚡</span>
+                    <Lightning size={14} />
                     <span>核心物理机理与约束方程组 (Governing Constraints)</span>
                   </div>
                   <div className="space-y-2">
@@ -288,7 +292,7 @@ export function CandidateModelLecture({
             <div className="space-y-3.5">
               <div className="rounded-lg border border-sky-500/20 bg-sky-500/[0.04] p-3 space-y-2">
                 <div className="font-semibold text-sky-300 text-xs flex items-center gap-1">
-                  <span>📌</span>
+                  <PushPin size={14} />
                   <span>对于什么类型的问题可以用这个模型？</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -306,7 +310,7 @@ export function CandidateModelLecture({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="rounded-lg border border-emerald-500/25 bg-emerald-950/20 p-3 space-y-1.5">
                   <div className="font-semibold text-emerald-300 text-xs flex items-center gap-1">
-                    <span>💡</span>
+                    <Lightbulb size={14} />
                     <span>何时应该首选该模型？（判定特征）</span>
                   </div>
                   <p className="text-[11px] text-white/80 leading-relaxed">
@@ -316,7 +320,7 @@ export function CandidateModelLecture({
 
                 <div className="rounded-lg border border-rose-500/25 bg-rose-950/20 p-3 space-y-1.5">
                   <div className="font-semibold text-rose-300 text-xs flex items-center gap-1">
-                    <span>🚫</span>
+                    <Prohibit size={14} />
                     <span>何时不适用？（失效边界与缺陷）</span>
                   </div>
                   <p className="text-[11px] text-white/80 leading-relaxed">
@@ -328,7 +332,7 @@ export function CandidateModelLecture({
               {/* 优缺点对比 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="rounded-lg border border-white/10 bg-black/25 p-3 space-y-1.5">
-                  <div className="font-medium text-emerald-300 text-xs">✅ 核心优势 (Pros)</div>
+                  <div className="flex items-center gap-1 font-medium text-emerald-300 text-xs"><CheckCircle size={14} />核心优势 (Pros)</div>
                   <ul className="list-disc pl-4 space-y-1 text-[11px] text-white/75">
                     {currentModel.applicableScenarios.prosAndCons.pros.map((p, i) => (
                       <li key={i}>{p}</li>
@@ -337,7 +341,7 @@ export function CandidateModelLecture({
                 </div>
 
                 <div className="rounded-lg border border-white/10 bg-black/25 p-3 space-y-1.5">
-                  <div className="font-medium text-amber-300 text-xs">⚠️ 局限性与挑战 (Cons)</div>
+                  <div className="flex items-center gap-1 font-medium text-amber-300 text-xs"><Warning size={14} />局限性与挑战 (Cons)</div>
                   <ul className="list-disc pl-4 space-y-1 text-[11px] text-white/75">
                     {currentModel.applicableScenarios.prosAndCons.cons.map((c, i) => (
                       <li key={i}>{c}</li>
@@ -353,7 +357,7 @@ export function CandidateModelLecture({
             <div className="space-y-3.5">
               <div className="rounded-lg border border-sky-500/20 bg-sky-500/[0.04] p-3 space-y-2">
                 <div className="font-semibold text-sky-300 text-xs flex items-center gap-1">
-                  <span>📊</span>
+                  <ChartBar size={14} />
                   <span>如何映射到本题的附件数据文件？</span>
                 </div>
                 <ul className="list-disc pl-4 space-y-1 text-[11px] text-white/80">
@@ -365,7 +369,7 @@ export function CandidateModelLecture({
 
               <div className="rounded-lg border border-white/10 bg-black/30 p-3 space-y-1.5">
                 <div className="font-semibold text-emerald-300 text-xs flex items-center gap-1">
-                  <span>⚙️</span>
+                  <Gear size={14} />
                   <span>推荐工业级求解器与工具链</span>
                 </div>
                 <p className="text-[11px] text-white/80 leading-relaxed font-mono">
@@ -377,7 +381,7 @@ export function CandidateModelLecture({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-sky-300 flex items-center gap-1">
-                      <span>🐍</span>
+                      <Code size={14} />
                       <span>核心 Python 建模代码范式</span>
                     </span>
                     {onSendToSandbox ? (
@@ -402,7 +406,7 @@ export function CandidateModelLecture({
             <div className="space-y-3">
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.05] p-3 space-y-2">
                 <div className="font-semibold text-amber-300 text-xs flex items-center gap-1.5">
-                  <span>⚠️</span>
+                  <Warning size={14} />
                   <span>国赛/美赛评委踩坑排查与拔高加分技巧</span>
                 </div>
                 <div className="space-y-2">
@@ -421,15 +425,15 @@ export function CandidateModelLecture({
 
           {/* 底部引导做题操作栏 */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
-            <div className="text-[11px] text-white/60">
-              💡 已全面理解模型公式与适用场景？带着这些机理知识，进入下方的 4 阶梯选择题！
+            <div className="flex items-center gap-1 text-[11px] text-white/60">
+              <Lightbulb size={14} />已全面理解模型公式与适用场景？带着这些机理知识，进入下方的 4 阶梯选择题！
             </div>
             {onStartQuiz ? (
               <button
                 onClick={onStartQuiz}
                 className="flex items-center gap-1.5 rounded-lg border border-emerald-500/50 bg-emerald-500/20 px-4 py-1.5 text-xs font-bold text-emerald-200 transition-all hover:bg-emerald-500/30 shadow-md"
               >
-                <span>🚀</span>
+                <RocketLaunch size={14} />
                 <span>带着该模型公式，开始做选择题</span>
                 <span>↓</span>
               </button>
