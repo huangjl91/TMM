@@ -111,3 +111,9 @@ button:disabled { cursor: not-allowed; }
 @keyframes tmm-rise { from { opacity: .65; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 @media (max-width: 1120px) { .tmm-assistant { width: 280px; }.tmm-journey-label { display: none; }.tmm-principle { display: none; } }
+@media (max-width: 1020px) {
+  .tmm-wordmark span,.tmm-model-state { display: none; }
+  .tmm-assistant:not(.is-collapsed) { position: absolute; z-index: 30; top: 48px; right: 0; bottom: 0; width: 280px; box-shadow: -12px 0 28px rgb(31 58 54 / .14); }
+  .tmm-assistant.is-collapsed { width: 38px; }
+  .tmm-current-step { width: 150px; }
+}
