@@ -7,10 +7,10 @@ description: >-
   逐位一致」的可复现交付。需要首次求解与冻结清单生成请用 matholve；图件首次绘制请用 mathualize；
   论文首次排版请用 mathaper；导出投稿材料请用 journalmit。
   v1.4.0 扩展覆盖跨平台/多语言、LLM 辅助建模、深度学习训练产物、供应链安全、统计严谨性五大维度，
-  新增 CC-2/CC-3 扩展闸门与附录 AA–AE；v1.4.1 完成全量 12 个配套脚本实体化与文档一致性收口；v1.4.2 新增 env_doctor 预检诊疗脚本（一次性定位阻断项）并补全 R-69~R-82 高频故障模式。详见各附录。
+  新增 CC-2/CC-3 扩展闸门与附录 AA–AE；v1.4.1 完成全量 12 个配套脚本实体化与文档一致性收口；v1.4.2 新增 env_doctor 预检诊疗脚本（一次性定位阻断项）并补全 R-69~R-82 高频故障模式。v1.4.3 再补全 R-83~R-98 高频故障模式（Python 次版本/时区区域/cuDNN 确定性/BOM·CRLF/科学计数法·全角数字/siunitx·宏定义数值/数值越界/非官方下载/AI 代码口径漂移/wheel·sdist 差异/seed env 注入/字体缺失/多重比较校正/数据划分泄漏/DB 查询未固化），并强化 env_doctor 新增 BOM·CRLF、时区区域、字体三项检测。详见各附录。
 license: MIT
 metadata:
-  version: "1.4.2"
+  version: "1.4.3"
   phase: "G3→G4→G5→G6: Full Pipeline Reproducibility + Selfvolving Loop + Selfearning Index + Cross-platform/AI/DL/Security/Statistical Rigor"
   style: "A"
 ---
@@ -632,7 +632,8 @@ reproduce/
 | v1.3.0 | 2026-09-29 | 全网检索深度优化：修 DEF-01~24 缺陷；新增 CC-1 合规闸门；S/T 强化为 v2（混合检索/冲突解决/自动 lesson/自进化闭环）；新增附录 U 永久归档、V 种子表、W provenance、X 复现声明、Y 竞赛合规、Z 工具链推荐 |
 | v1.4.0 | 2026-09-30 | 二次全网检索深度优化（5 子代理并行：统计严谨性/供应链安全/深度学习复现/LLM辅助复现/跨平台多语言）；新增 CC-2(训练产物)、CC-3(AI推导可验证) 闸门；五维评分卡扩至六维（增统计严谨度）；新增附录 AA 跨平台多语言、AB 复现安全与供应链、AC 深度学习/大模型复现、AD 统计严谨性、AE AI 辅助建模复现性；R-53~R-68 故障模式；CI 三平台矩阵 + GPU 确定性 + 哈希锁依赖 + 漏洞/密钥扫描 |
 | v1.4.1 | 2026-10-01 | 全量脚本实体化收官：将文档引用但缺失的 7 个脚本（repro_score/model_check/data_check/ref_verify/claim_evidence_check/prompt_verify/fig_lint）与跨平台编排器 reproduce/reproduce.py 全部落盘（共 12 个 .py，均 pathlib+argparse+0/1 返回码约定）；修复 fig_lint.py 导入期 NameError、ref_verify.py 占位死代码；文档一致性收口（CB-8 命名、五维→六维、附录 M 全量脚本清单、附录 C/N/I/§8 全链路门禁同步） |
-| v1.4.2 | 2026-10-01 | 新增 `scripts/env_doctor.py` 预检诊疗脚本（一次性扫描 10 类阻断项、回指 R/Q/AB、非阻断接入 reproduce.py 与 reproduce.sh）；补全 R-69~R-82 高频故障模式（Notebook 真源 / Excel 多 sheet / \input 递归 / TikZ 缓存 / Git LFS / import 期随机 / 多进程 start 方法 / sklearn·tf 游离 RNG / numpy2 破坏性 / matplotlibrc 未固化 / babel 逗号 / 实时 API 抓取 / fp32·64 混用 / 隐式 env 依赖）；§8 增 preflight 步、附录 M/G 增 env_doctor 条目 |
+| v1.4.2 | 2026-10-01 | 新增 `scripts/env_doctor.py` 预检诊疗脚本（一次性扫描 10 类阻断项、回指 R/Q/AB、非阻断接入 reproduce.py 与 reproduce.sh）；补全 R-69~R-82 高频故障模式（Notebook 真源 / Excel 多 sheet / 
+| v1.4.3 | 2026-10-01 | 再补全 R-83~R-98 高频故障模式（Python 次版本/时区区域/cuDNN 确定性/BOM·CRLF/科学计数法·全角数字/siunitx·宏定义数值/数值越界/非官方下载/AI 代码口径漂移/wheel·sdist 差异/seed env 注入/字体缺失/多重比较校正/数据划分泄漏/DB 查询未固化）；强化 `scripts/env_doctor.py` 新增 BOM·CRLF、时区区域、字体三项检测（共 13 类阻断项） |\input 递归 / TikZ 缓存 / Git LFS / import 期随机 / 多进程 start 方法 / sklearn·tf 游离 RNG / numpy2 破坏性 / matplotlibrc 未固化 / babel 逗号 / 实时 API 抓取 / fp32·64 混用 / 隐式 env 依赖）；§8 增 preflight 步、附录 M/G 增 env_doctor 条目 |
 
 ---
 
@@ -931,6 +932,22 @@ matplotlib 必须用 `Agg` 后端（无头环境稳定出图）；DL 赛题须�
 | R-80 | 数据溯源 | 实时 API/网页抓取数据未缓存，复跑时源变更或下线致不一致 | 搜 `requests.get/urlopen` 数据拉取 | 首次抓取落盘 + 哈希固化，复现只读本地快照（附录 W provenance） |
 | R-81 | 数值稳定 | 跨 float32/float64 混用（尤其 DL 训练 fp16/bf16 与推理 fp32）致数值漂移 | 搜 `float32/.half()/.float()` | 统一精度并记录混合精度策略（附录 AC.2） |
 | R-82 | 隐式依赖 | 结果依赖 `os.environ` 未文档化变量（OMP_NUM_THREADS、自定义 flag） | grep `os.environ` 与复现文档 | 全部环境变量写入复现包 README/Dockerfile ENV（附录 O） |
+| R-83 | 环境差异 | Python 次版本差异（3.8→3.11）致 `dict` 序 / `datetime` ISO / `subprocess` 文本模式行为漂移 | `python --version` 与 lock 比对 | 锁 `python==3.11.*` 于 Dockerfile + pyenv（附录 O / R-07 / env_doctor check_python_version） |
+| R-84 | 环境差异 | 容器时区/区域（TZ / LC_ALL）不同致时间戳、字符串格式化、排序差异 | 查 Dockerfile/CI 是否固化 TZ/LANG | 固定 `ENV TZ=UTC LANG=C.UTF-8 LC_ALL=C.UTF-8`（附录 O / AA.3 / env_doctor check_timezone_locale） |
+| R-85 | 随机性(DL) | `torch.use_deterministic_algorithms(True)` 未开，cuDNN 非确定性卷积/原子操作致 GPU 结果漂移 | grep `use_deterministic_algorithms` | 开启 + `CUBLAS_WORKSPACE_CONFIG=:4096:8` + `torch.backends.cudnn.deterministic=True`（附录 AC.6） |
+| R-86 | 数据溯源 | 数据/源码含 UTF-8 BOM 或 CRLF（Windows 生成），pandas/正则解析错位或 `float()` 失败 | 二进制查 `\xef\xbb\xbf` / `\r\n` | `dos2unix` 去 CRLF；读取用 `encoding='utf-8-sig'`（附录 AA.1 / env_doctor check_bom_crlf） |
+| R-87 | 数据溯源 | 源数据数值为科学计数法/千分位逗号/全角数字（PDF 复制、Excel 显示），`float()` 失败 | 搜 `1,234` / 全角 `１２３` / `1e3` | 清洗层正则去千分位 + 全角转半角 + 断言（附录 W / R-44） |
+| R-88 | 论文回溯 | LaTeX 数值经 `\num{}` / `\SI` / siunitx 包裹或单位拼接，纯数字正则漏提 | 搜 `\num` / `\SI` | tex_num_extract 增 siunitx 解析（附录 I / R-19） |
+| R-89 | 论文回溯 | 数值以 `\newcommand{\resA}{3.21}` 宏定义存在，正文引用而非字面量 | 搜 `\newcommand` 含数值 | tex_num_extract 须展开宏定义后提取（附录 I / R-19） |
+| R-90 | 数值稳定 | 大数/小数下溢溢出（`exp` 溢出、`log(0)`→-inf、除零→NaN），跨平台 NaN 处理不同 | 搜 `log(` / `exp(` / `/ 0` | `np.errstate` + 钳位 + 显式 guard（R-56 / AD.2） |
+| R-91 | 供应链 | 模型权重/数据集从非官方网盘/论坛下载，URL 不可复现或文件已删 | 查 provenance 是否登记外源 | 登记来源 + 镜像备份 + 哈希锁（附录 AB A11 / W） |
+| R-92 | AI 辅助 | LLM 生成预处理代码与论文描述口径不一（缺失值/变量口径不同） | claim_evidence_check 比对 | 触发 CC-3 + 人工核验推导链（附录 AE / R-62） |
+| R-93 | 环境差异 | `pip` 装二进制 wheel 与源码 sdist 行为不同（numpy/MKL 后端差异） | 查 `pip download --no-binary` | 锁 wheel 哈希 + 指定 `--only-binary`（附录 AB OP-1） |
+| R-94 | 随机性 | 种子以环境变量/配置注入但复现文档未记录实际值（`SEED` 无默认），复跑值不同 | grep `os.environ['SEED']` | seed_registry 登记实际值 + 入口断言 seed 已设（附录 V / R-17） |
+| R-95 | 图件复现 | 字体缺失（CI 无中文字体/特定 math 字体）致图件渲染回退、文字位置/大小变化 | matplotlib 警告 "Glyph missing" | 仓库 `matplotlibrc` 固化 font.family + Dockerfile 装 fonts（R-95 / AC.5 / env_doctor check_fonts） |
+| R-96 | 统计严谨 | 多重比较未校正（multiple comparisons），假阳性显著 | 检查 p 值是否校正 | Bonferroni/Holm 校正 + 报告校正后（附录 AD.1 / R-63） |
+| R-97 | 统计严谨 | 训练/测试划分随机且无固定 split 索引，或数据泄漏（scaler fit on test） | grep `train_test_split` 无 random_state | 固定 `random_state` + 记录 split 哈希（附录 AC.3 / CC-2） |
+| R-98 | 数据溯源 | 数据库/SQL 查询结果未固化，复跑时 DB 状态变化（增删行）致结果漂移 | 搜 `sqlite3.connect` / `psycopg2` / `SELECT` | 查询落盘 + 哈希 + 复现只读本地（附录 W provenance / R-80） |
 
 **【铁律】**：任一场景触发即记录到 `state/repro_history.jsonl`，用于自进化循环。
 

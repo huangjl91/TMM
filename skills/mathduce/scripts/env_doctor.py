@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """env_doctor.py — 复现环境预检 / 诊疗（preflight diagnostic）
 
-在跑 heavy 复现链（reproduce.py / reproduce.sh）之前，一次性扫描最常见阻断项，
+在跑 heavy 复现链（reproduce.py / reproduce.sh）之前，一次性扫描 13 类最常见阻断项，
 逐项给出 [OK / WARN / FAIL] 与可执行的修复命令，并回指对应附录条目（R-/Q/AB/AA）。
 只读诊断，不做任何破坏性修改；适合作为「确保所有情况都能解决」的第一道防线。
 
@@ -226,6 +226,72 @@ def check_determinism_env():
     return ("OK", "确定性 ENV 已固化: " + ", ".join(sorted(set(signals))), "")
 
 
+def check_bom_crlf():
+    """R-86: 数据/源码含 BOM 或 CRLF（Windows 生成文件）致 pandas/正则解析错位"""
+    targets = []
+    for base in ("data", "code", "scripts", "paper"):
+        d = ROOT / base
+        if d.is_dir():
+            targets += [p for p in d.rglob("*")
+                        if p.suffix.lower() in (".csv", ".tsv", ".txt", ".py",
+                                                ".tex", ".json", ".md")]
+    targets += list(ROOT.glob("*.py"))
+    bom = crlf = 0
+    for p in targets:
+        try:
+            raw = p.read_bytes()
+        except Exception:
+            continue
+        if raw.startswith(b"\xef\xbb\xbf"):
+            bom += 1
+        if b"\r\n" in raw:
+            crlf += 1
+    if bom == 0 and crlf == 0:
+        return ("OK", "未发现 UTF-8 BOM / CRLF（Windows 生成文件常见陷阱，R-86）", "")
+    notes = []
+    if bom:
+        notes.append(f"{bom} 个文件含 UTF-8 BOM")
+    if crlf:
+        notes.append(f"{crlf} 个文件含 CRLF 换行")
+    return ("WARN", "；".join(notes) + "（解析易错位 / float() 易失败）",
+            "用 `dos2unix` 去 CRLF；读取用 `encoding='utf-8-sig'` 兼容 BOM（R-86 / 附录 AA.1）")
+
+
+def check_timezone_locale():
+    """R-84: 容器/CI 时区与区域设置未固化致时间戳/排序/格式化漂移"""
+    signals = set()
+    for rel in ("reproduce/Dockerfile", "reproduce/docker-compose.yml",
+               ".github/workflows/reproduce.yml", "reproduce/reproduce.sh", "Dockerfile"):
+        t = read_text_safe(ROOT / rel)
+        if "TZ=" in t or "TZ " in t:
+            signals.add("TZ")
+        if "LANG=" in t or "LC_ALL=" in t or "C.UTF-8" in t:
+            signals.add("LANG")
+    if not signals:
+        return ("WARN", "未发现 TZ / LANG 固化（时区/区域差异致时间戳·排序·格式化漂移，R-84）",
+                "Dockerfile 固定 `ENV TZ=UTC LANG=C.UTF-8 LC_ALL=C.UTF-8`（附录 O / AA.3）")
+    return ("OK", "时区/区域已固化: " + ", ".join(sorted(signals)), "")
+
+
+def check_fonts():
+    """R-95: 图件依赖特定字体但复现环境缺失致渲染回退/位置漂移"""
+    if not (ROOT / "figs").is_dir():
+        return (None, "", "")  # 无图件则跳过
+    signals = set()
+    for rc in (ROOT / "matplotlibrc", ROOT / "reproduce" / "matplotlibrc"):
+        t = read_text_safe(rc)
+        if "font.family" in t or "font.sans-serif" in t:
+            signals.add("matplotlibrc-font")
+    for rel in ("reproduce/Dockerfile", "Dockerfile"):
+        t = read_text_safe(ROOT / rel)
+        if "fonts-" in t or "fc-cache" in t or "fontconfig" in t:
+            signals.add("docker-fonts")
+    if not signals:
+        return ("WARN", "存在 figs/ 但未固化字体（CI 缺中文字体/数学字体致渲染回退，R-95）",
+                "仓库 `matplotlibrc` 固化 font.family + Dockerfile 安装 fonts（如 fonts-dejavu/fonts-noto-cjk）（R-95 / 附录 AC.5）")
+    return ("OK", "字体已固化: " + ", ".join(sorted(signals)), "")
+
+
 def main():
     ap = argparse.ArgumentParser(description="复现环境预检 / 诊疗")
     ap.add_argument("--json", action="store_true", help="输出机器可读 JSON 数组")
@@ -242,6 +308,9 @@ def main():
         check_prompt_hashes(),
         check_encoding(),
         check_determinism_env(),
+        check_bom_crlf(),
+        check_timezone_locale(),
+        check_fonts(),
     ]
     findings = [{"status": s, "msg": m, "fix": fx} for (s, m, fx) in raw if s is not None]
 
