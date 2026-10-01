@@ -7,10 +7,10 @@ description: >-
   逐位一致」的可复现交付。需要首次求解与冻结清单生成请用 matholve；图件首次绘制请用 mathualize；
   论文首次排版请用 mathaper；导出投稿材料请用 journalmit。
   v1.4.0 扩展覆盖跨平台/多语言、LLM 辅助建模、深度学习训练产物、供应链安全、统计严谨性五大维度，
-  新增 CC-2/CC-3 扩展闸门与附录 AA–AE；v1.4.1 完成全量 12 个配套脚本实体化与文档一致性收口。详见各附录。
+  新增 CC-2/CC-3 扩展闸门与附录 AA–AE；v1.4.1 完成全量 12 个配套脚本实体化与文档一致性收口；v1.4.2 新增 env_doctor 预检诊疗脚本（一次性定位阻断项）并补全 R-69~R-82 高频故障模式。详见各附录。
 license: MIT
 metadata:
-  version: "1.4.1"
+  version: "1.4.2"
   phase: "G3→G4→G5→G6: Full Pipeline Reproducibility + Selfvolving Loop + Selfearning Index + Cross-platform/AI/DL/Security/Statistical Rigor"
   style: "A"
 ---
@@ -273,6 +273,7 @@ metadata:
 
 ```
 [Step 0] 冻结快照      git tag g3rozen && git archive -o repro_src.tar
+[Step 0.5] 环境预检    python scripts/env_doctor.py   # 非阻断，先定位阻断项（附录 Q / env_doctor）
 [Step 1] 环境隔离      python -m venv .venv && pip install -r requirements.txt
 [Step 2] 数据溯源      python scripts/frozen_check.py --check        # CB-7
 [Step 3] 重跑求解      python code/solve_main.py                 # CB-6
@@ -335,6 +336,9 @@ set -euo pipefail
 
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"   # 项目工作区根
 cd "$PROJ"
+
+echo "[0] 环境预检（preflight，非阻断）..."
+python scripts/env_doctor.py || echo "ENV-PREFLIGHT-WARN"
 
 echo "[1/8] CB-7 冻结清单哈希校验 ..."
 python scripts/frozen_check.py --check || { echo "CB-7 FAIL"; exit 1; }
@@ -524,6 +528,11 @@ print("REPRODUCE: PASS")
 | 27 | 跨平台 CI 实测 | ubuntu/windows/macos 三 job 全 PASS | 任一平台未验证即标⚠️（附录 AA） |
 | 28 | LLM 调用已固化溯源 | `frozen_results.json` 含 `llm_registry` | 模型/版本/prompt 哈希已登记（附录 AE） |
 | 29 | AI 推导可验证 | `python scripts/claim_evidence_check.py` | 论文数值均有代码/计算证据（CC-3） |
+| 30 | 环境预检已通过 | `python scripts/env_doctor.py` | 无 FAIL（仅有 OK/WARN 可继续） |
+| 31 | Notebook 已导出脚本 | 检查 `code/*.ipynb` 且无 .py | 用 `jupyter nbconvert --to script` 导出（R-69） |
+| 32 | 非 CSV 数据已快照哈希 | `data/data_manifest.json` 含 .xlsx/.h5/parquet 来源 | 落盘 CSV/parquet 快照 + 哈希（R-70） |
+| 33 | 外部 .tex 已递归展开 | grep `\input\|\include` in paper/ | tex_num_extract 须递归（R-71） |
+| 34 | Git LFS/子模块已拉取 | `git lfs pull` + `git submodule update --init` | 真实二进制而非指针文件（R-73） |
 
 ---
 
@@ -623,6 +632,7 @@ reproduce/
 | v1.3.0 | 2026-09-29 | 全网检索深度优化：修 DEF-01~24 缺陷；新增 CC-1 合规闸门；S/T 强化为 v2（混合检索/冲突解决/自动 lesson/自进化闭环）；新增附录 U 永久归档、V 种子表、W provenance、X 复现声明、Y 竞赛合规、Z 工具链推荐 |
 | v1.4.0 | 2026-09-30 | 二次全网检索深度优化（5 子代理并行：统计严谨性/供应链安全/深度学习复现/LLM辅助复现/跨平台多语言）；新增 CC-2(训练产物)、CC-3(AI推导可验证) 闸门；五维评分卡扩至六维（增统计严谨度）；新增附录 AA 跨平台多语言、AB 复现安全与供应链、AC 深度学习/大模型复现、AD 统计严谨性、AE AI 辅助建模复现性；R-53~R-68 故障模式；CI 三平台矩阵 + GPU 确定性 + 哈希锁依赖 + 漏洞/密钥扫描 |
 | v1.4.1 | 2026-10-01 | 全量脚本实体化收官：将文档引用但缺失的 7 个脚本（repro_score/model_check/data_check/ref_verify/claim_evidence_check/prompt_verify/fig_lint）与跨平台编排器 reproduce/reproduce.py 全部落盘（共 12 个 .py，均 pathlib+argparse+0/1 返回码约定）；修复 fig_lint.py 导入期 NameError、ref_verify.py 占位死代码；文档一致性收口（CB-8 命名、五维→六维、附录 M 全量脚本清单、附录 C/N/I/§8 全链路门禁同步） |
+| v1.4.2 | 2026-10-01 | 新增 `scripts/env_doctor.py` 预检诊疗脚本（一次性扫描 10 类阻断项、回指 R/Q/AB、非阻断接入 reproduce.py 与 reproduce.sh）；补全 R-69~R-82 高频故障模式（Notebook 真源 / Excel 多 sheet / \input 递归 / TikZ 缓存 / Git LFS / import 期随机 / 多进程 start 方法 / sklearn·tf 游离 RNG / numpy2 破坏性 / matplotlibrc 未固化 / babel 逗号 / 实时 API 抓取 / fp32·64 混用 / 隐式 env 依赖）；§8 增 preflight 步、附录 M/G 增 env_doctor 条目 |
 
 ---
 
@@ -641,6 +651,7 @@ reproduce/
 | `scripts/ref_verify.py` | `python scripts/ref_verify.py [--online]` | 0(无 DOI/全通过) / 1(格式非法) | CC-3 |
 | `scripts/claim_evidence_check.py` | `python scripts/claim_evidence_check.py` | 0=PASS / 1(AI臆造嫌疑) | CC-3 |
 | `scripts/prompt_verify.py` | `python scripts/prompt_verify.py`（无哈希文件则生成） | 0=PASS / 1(不一致) | AE |
+| `scripts/env_doctor.py` | `python scripts/env_doctor.py [--json]` | 0(无FAIL) / 1(有FAIL) | 预检/诊疗（非阻断） |
 
 **环境固化与编排文件**：
 
@@ -906,6 +917,20 @@ matplotlib 必须用 `Agg` 后端（无头环境稳定出图）；DL 赛题须�
 | R-66 | 跨平台 | conda 跨平台锁文件失败（vc14_0 等平台专用包） | `conda env export` 解析失败 | `conda-lock -p linux-64 -p win-64 -p osx-64`（附录 AA §AA.5） |
 | R-67 | 跨平台 | 长路径/大小写不敏感/符号链接失效 | `FileNotFoundError` | `pathlib` + `\\?\` 前缀 / 禁 symlink（附录 AA §AA.6/§AA.7） |
 | R-68 | 随机性(DL) | 训练产物（权重/adapter/checkpoint）不可加载或哈希不一致 | `model_check.py` | 完整 checkpoint + 哈希固化（CC-2 / 附录 AC §AC.4） |
+| R-69 | 数据溯源 | 数值真源为 Jupyter Notebook（.ipynb），无可脚本化 .py | 检查 `code/*.ipynb` 且无 `.py` | `jupyter nbconvert --to script` 导出为 .py 纳入复现链（复现脚本不得依赖交互式 notebook） |
+| R-70 | 数据溯源 | 数据存 Excel（.xlsx）含公式/多 sheet，pandas 默认只读首 sheet | `pd.read_excel` 行为核查 | 显式 `sheet_name=None` + 固化读取脚本 + 导出 CSV/parquet 快照哈希（R-44 仅覆盖 CSV 编码） |
+| R-71 | 论文回溯 | LaTeX 用 `\input{}`/`\include{}` 引入外部 .tex，数值分散未纳入提取 | 正则扫 `\input\|\include` | tex_num_extract 须递归展开所有被引 .tex 后再提取数值 |
+| R-72 | 图件复现 | TikZ/externalize 图缓存未清理，复跑仍用旧 .pdf | 检查 `figs/*.pdf` + `tikzexternal` 缓存目录 | 复跑前 `rm -rf tikzcache/` 再重生成（或关 externalization） |
+| R-73 | 数据版本 | 数据经 Git LFS / submodule 管理，checkout 后仅得指针文件 | `file data/*.h5` 显示 "Git LFS" 文本 | `git lfs pull` / `git submodule update --init` 拉取真实二进制后再哈希 |
+| R-74 | 随机性 | 模块导入期即调用 `random/numpy` 生成值，种子晚于首次使用 | 在 import 阶段设断点/搜 import 期随机调用 | 随机初始化移至函数内 + 入口最前 `seed_all(seed)` |
+| R-75 | 随机性 | 多进程 `multiprocessing` start 方法跨平台不同（fork vs spawn）致结果/顺序差异 | 检查 `multiprocessing` 用法 | 显式 `set_start_method` + 固定 worker 数；或用 `concurrent.futures` |
+| R-76 | 随机性 | 仅设 `np.random.seed` 但 `sklearn/tensorflow` 自带 RNG 未设，部分随机源游离 | 搜 `sklearn`/`tf` 随机调用 | 同步 `sklearn.utils.check_random_state` / `tf.random.set_seed` |
+| R-77 | 环境差异 | numpy 2.0 破坏性变更（移除 `np.float_` 等）致旧脚本崩溃 | `numpy.__version__` | 锁 `numpy<2` 或迁移代码（附录 AB OP-1 版本锁） |
+| R-78 | 图件复现 | `matplotlibrc` / `plt.rcParams` 在全局配置文件被改，未随仓库固化 | 检查 `~/.matplotlibrc` 与仓库内 `matplotlibrc` | 将 rcParams 写入仓库 `matplotlibrc` 并 `plt.style.use` |
+| R-79 | 论文回溯 | 本地化 LaTeX 宏包（babel 法语/德语）将小数点渲染为逗号，数值 token 提取失真 | 检查 `babel` 选项 + PDF 数值 | 统一 `babel` 英文/数字设置或提取阶段正则兼容逗号 |
+| R-80 | 数据溯源 | 实时 API/网页抓取数据未缓存，复跑时源变更或下线致不一致 | 搜 `requests.get/urlopen` 数据拉取 | 首次抓取落盘 + 哈希固化，复现只读本地快照（附录 W provenance） |
+| R-81 | 数值稳定 | 跨 float32/float64 混用（尤其 DL 训练 fp16/bf16 与推理 fp32）致数值漂移 | 搜 `float32/.half()/.float()` | 统一精度并记录混合精度策略（附录 AC.2） |
+| R-82 | 隐式依赖 | 结果依赖 `os.environ` 未文档化变量（OMP_NUM_THREADS、自定义 flag） | grep `os.environ` 与复现文档 | 全部环境变量写入复现包 README/Dockerfile ENV（附录 O） |
 
 **【铁律】**：任一场景触发即记录到 `state/repro_history.jsonl`，用于自进化循环。
 

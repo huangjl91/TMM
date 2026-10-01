@@ -92,6 +92,18 @@ def main() -> int:
     )
     parser.parse_known_args()
 
+    # 0) 环境预检（preflight，仅提示，不阻断整条链路）
+    #    在任何重算前先跑 env_doctor，把最常见的阻断项一次性列出，
+    #    让「所有情况都能被定位与解决」——失败也不影响后续强制闸门。
+    print("[run] 环境预检 (ENV / preflight)", flush=True)
+    try:
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "env_doctor.py")],
+            cwd=str(ROOT), encoding="utf-8", bufsize=1,
+        )
+    except Exception as e:  # 极端情况下医生脚本自身异常也不应阻断复现
+        print(f"[WARN] 预检脚本未执行: {e}", flush=True)
+
     ok = True
 
     # 1) CB-7 冻结清单哈希 + 必填项机检（复现前置铁律）
