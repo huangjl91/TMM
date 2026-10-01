@@ -1,0 +1,13 @@
+# docker-compose.yml — 一键复现环境
+services:
+  reproduce:
+    build:
+      context: ..
+      dockerfile: reproduce/Dockerfile
+    volumes:
+      - ..:/work
+    environment:
+      PYTHONHASHSEED: "0"
+      MPLBACKEND: "Agg"
+      LC_ALL: "C.UTF-8"
+    working_dir: /work

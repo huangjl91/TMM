@@ -1,0 +1,13 @@
+# Python bytecode cache (never commit)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local reproducibility state / build artifacts (regenerated at run time)
+state/
+*.tar.gz
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store

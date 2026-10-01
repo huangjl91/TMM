@@ -1,0 +1,15 @@
+# mathduce 技能自带工具链依赖（仅运行 scripts/*.py 与 reproduce 入口所需）
+# 注：这是「技能工具」依赖，与用户项目的 code/ 运行时依赖（requirements.txt）相互独立。
+# 安装：pip install -r reproduce/requirements.skill.txt
+
+# 核心（frozen_check / fig_diff / tex_num_extract / paper_number_diff /
+#       data_check / ref_verify / claim_evidence_check / prompt_verify / repro_score）
+numpy>=1.24
+
+# 图件检查（fig_lint：DPI 校验，缺失则自动降级为仅命名/空文件检查）
+Pillow>=10.0
+
+# ===== 可选：仅当赛题含深度学习训练产物（CC-2）时安装 =====
+# 缺失时 model_check.py 在检测到训练脚本时提示，非 DL 赛题自动跳过
+# torch>=2.1
+# safetensors>=0.4

@@ -1,0 +1,24 @@
+name: reproduce
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+      - name: CB-7 冻结清单哈希校验
+        run: python scripts/frozen_check.py --check
+      - name: CB-8/CB-9 图件比对
+        run: python scripts/fig_diff.py
+      - name: CB-10 论文数值双向比对
+        run: python scripts/paper_number_diff.py
