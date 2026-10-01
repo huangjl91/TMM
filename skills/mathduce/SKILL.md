@@ -7,10 +7,10 @@ description: >-
   逐位一致」的可复现交付。需要首次求解与冻结清单生成请用 matholve；图件首次绘制请用 mathualize；
   论文首次排版请用 mathaper；导出投稿材料请用 journalmit。
   v1.4.0 扩展覆盖跨平台/多语言、LLM 辅助建模、深度学习训练产物、供应链安全、统计严谨性五大维度，
-  新增 CC-2/CC-3 扩展闸门与附录 AA–AE；v1.4.1 完成全量 12 个配套脚本实体化与文档一致性收口；v1.4.2 新增 env_doctor 预检诊疗脚本（一次性定位阻断项）并补全 R-69~R-82 高频故障模式。v1.4.3 再补全 R-83~R-98 高频故障模式（Python 次版本/时区区域/cuDNN 确定性/BOM·CRLF/科学计数法·全角数字/siunitx·宏定义数值/数值越界/非官方下载/AI 代码口径漂移/wheel·sdist 差异/seed env 注入/字体缺失/多重比较校正/数据划分泄漏/DB 查询未固化），并强化 env_doctor 新增 BOM·CRLF、时区区域、字体三项检测。详见各附录。
+  新增 CC-2/CC-3 扩展闸门与附录 AA–AE；v1.4.1 完成全量 12 个配套脚本实体化与文档一致性收口；v1.4.2 新增 env_doctor 预检诊疗脚本（一次性定位阻断项）并补全 R-69~R-82 高频故障模式。v1.4.3 再补全 R-83~R-98 高频故障模式（Python 次版本/时区区域/cuDNN 确定性/BOM·CRLF/科学计数法·全角数字/siunitx·宏定义数值/数值越界/非官方下载/AI 代码口径漂移/wheel·sdist 差异/seed env 注入/字体缺失/多重比较校正/数据划分泄漏/DB 查询未固化），并强化 env_doctor 新增 BOM·CRLF、时区区域、字体三项检测。v1.4.4 再补全 R-99~R-108 高频故障模式（JAX 非确定性/BLAS 线程数/传递依赖漂移/压缩包数据/大小写冲突/动态 prompt/置信区间缺失/随机颜色循环/LaTeX 引擎差异/DataLoader 顺序），并强化 env_doctor 新增 JAX 确定性、DataLoader worker、大小写冲突三项检测（共 16 类阻断项）。详见各附录。
 license: MIT
 metadata:
-  version: "1.4.3"
+  version: "1.4.4"
   phase: "G3→G4→G5→G6: Full Pipeline Reproducibility + Selfvolving Loop + Selfearning Index + Cross-platform/AI/DL/Security/Statistical Rigor"
   style: "A"
 ---
@@ -633,7 +633,8 @@ reproduce/
 | v1.4.0 | 2026-09-30 | 二次全网检索深度优化（5 子代理并行：统计严谨性/供应链安全/深度学习复现/LLM辅助复现/跨平台多语言）；新增 CC-2(训练产物)、CC-3(AI推导可验证) 闸门；五维评分卡扩至六维（增统计严谨度）；新增附录 AA 跨平台多语言、AB 复现安全与供应链、AC 深度学习/大模型复现、AD 统计严谨性、AE AI 辅助建模复现性；R-53~R-68 故障模式；CI 三平台矩阵 + GPU 确定性 + 哈希锁依赖 + 漏洞/密钥扫描 |
 | v1.4.1 | 2026-10-01 | 全量脚本实体化收官：将文档引用但缺失的 7 个脚本（repro_score/model_check/data_check/ref_verify/claim_evidence_check/prompt_verify/fig_lint）与跨平台编排器 reproduce/reproduce.py 全部落盘（共 12 个 .py，均 pathlib+argparse+0/1 返回码约定）；修复 fig_lint.py 导入期 NameError、ref_verify.py 占位死代码；文档一致性收口（CB-8 命名、五维→六维、附录 M 全量脚本清单、附录 C/N/I/§8 全链路门禁同步） |
 | v1.4.2 | 2026-10-01 | 新增 `scripts/env_doctor.py` 预检诊疗脚本（一次性扫描 10 类阻断项、回指 R/Q/AB、非阻断接入 reproduce.py 与 reproduce.sh）；补全 R-69~R-82 高频故障模式（Notebook 真源 / Excel 多 sheet / 
-| v1.4.3 | 2026-10-01 | 再补全 R-83~R-98 高频故障模式（Python 次版本/时区区域/cuDNN 确定性/BOM·CRLF/科学计数法·全角数字/siunitx·宏定义数值/数值越界/非官方下载/AI 代码口径漂移/wheel·sdist 差异/seed env 注入/字体缺失/多重比较校正/数据划分泄漏/DB 查询未固化）；强化 `scripts/env_doctor.py` 新增 BOM·CRLF、时区区域、字体三项检测（共 13 类阻断项） |\input 递归 / TikZ 缓存 / Git LFS / import 期随机 / 多进程 start 方法 / sklearn·tf 游离 RNG / numpy2 破坏性 / matplotlibrc 未固化 / babel 逗号 / 实时 API 抓取 / fp32·64 混用 / 隐式 env 依赖）；§8 增 preflight 步、附录 M/G 增 env_doctor 条目 |
+| v1.4.3 | 2026-10-01 | 再补全 R-83~R-98 高频故障模式（Python 次版本/时区区域/cuDNN 确定性/BOM·CRLF/科学计数法·全角数字/siunitx·宏定义数值/数值越界/非官方下载/AI 代码口径漂移/wheel·sdist 差异/seed env 注入/字体缺失/多重比较校正/数据划分泄漏/DB 查询未固化）；强化 `scripts/env_doctor.py` 新增 BOM·CRLF、时区区域、字体三项检测（共 13 类阻断项） |
+| v1.4.4 | 2026-10-01 | 再补全 R-99~R-108 高频故障模式（JAX 非确定性/BLAS 线程数/传递依赖漂移/压缩包数据/大小写冲突/动态 prompt/置信区间缺失/随机颜色循环/LaTeX 引擎差异/DataLoader 顺序）；强化 `scripts/env_doctor.py` 新增 JAX 确定性、DataLoader worker、大小写冲突三项检测（共 16 类阻断项） |\input 递归 / TikZ 缓存 / Git LFS / import 期随机 / 多进程 start 方法 / sklearn·tf 游离 RNG / numpy2 破坏性 / matplotlibrc 未固化 / babel 逗号 / 实时 API 抓取 / fp32·64 混用 / 隐式 env 依赖）；§8 增 preflight 步、附录 M/G 增 env_doctor 条目 |
 
 ---
 
@@ -948,6 +949,16 @@ matplotlib 必须用 `Agg` 后端（无头环境稳定出图）；DL 赛题须�
 | R-96 | 统计严谨 | 多重比较未校正（multiple comparisons），假阳性显著 | 检查 p 值是否校正 | Bonferroni/Holm 校正 + 报告校正后（附录 AD.1 / R-63） |
 | R-97 | 统计严谨 | 训练/测试划分随机且无固定 split 索引，或数据泄漏（scaler fit on test） | grep `train_test_split` 无 random_state | 固定 `random_state` + 记录 split 哈希（附录 AC.3 / CC-2） |
 | R-98 | 数据溯源 | 数据库/SQL 查询结果未固化，复跑时 DB 状态变化（增删行）致结果漂移 | 搜 `sqlite3.connect` / `psycopg2` / `SELECT` | 查询落盘 + 哈希 + 复现只读本地（附录 W provenance / R-80） |
+| R-99 | 随机性(DL) | JAX/XLA 默认非确定性（dropout/attention 归约顺序随运行变化） | 搜 `import jax` 且无 `PRNGKey`/`jax.config` | 固定 `jax.random.PRNGKey(seed)` + `JAX_DISABLE_MOST_OPTIMIZATIONS=1` + `jax_enable_x64`（附录 AC） |
+| R-100 | 数值稳定 | 不同 BLAS 线程数（OMP_NUM_THREADS）致浮点归约顺序不同、sum 末位差异 | 比对不同线程数结果 | 固定 `OMP_NUM_THREADS=1` + `OPENBLAS_NUM_THREADS=1`（附录 AA.3 / AC 共用） |
+| R-101 | 供应链 | 仅锁顶层依赖，传递依赖被间接升级致漂移 | `pip freeze` 比对 | 用 `pip-compile` 全量锁定（含传递依赖，附录 AB OP-1） |
+| R-102 | 数据溯源 | 数据经 zip/tar 压缩包分发，解压后未哈希或含隐藏文件（__MACOSX） | 查压缩包 + 解压清单 | 解压落盘 + 哈希校验 + 清除 __MACOSX（附录 W） |
+| R-103 | 跨平台 | macOS 大小写不敏感文件系统（HFS+/APFS）致 `import a` 与 `import A` 冲突、文件覆盖 | 查重复大小写文件名 | 统一小写文件名 + 消除大小写冲突（附录 AA.6） |
+| R-104 | AI 辅助 | prompt 含动态时间戳/随机数致 LLM 输出不可复现（同 prompt 不同次结果） | 查 prompt 模板变量 | prompt 固化 + 剔除动态变量（附录 AE.2） |
+| R-105 | 统计严谨 | 仅报告点估计无置信区间/标准误，无法判断复现一致性 | 查报告是否含 CI/SE | 补 95% CI + bootstrap 或解析 SE（附录 AD.3） |
+| R-106 | 图件复现 | 图件依赖随机颜色/标记循环（matplotlib 默认 cycler），同数据不同环境颜色不同 | 查 `plt.plot` 未指定 color | 显式指定 color/style + 固化 cycler（附录 AC.5） |
+| R-107 | 环境差异 | 不同 LaTeX 引擎（pdflatex/xelatex/lualatex）数值排版/字体差异致 PDF 数值提取错位 | 查引擎一致性 | 固定引擎 + 提取对齐（附录 I） |
+| R-108 | 随机性(DL) | 并行 DataLoader（`num_workers>0`）shuffle 与 worker 初始化随机，每轮数据顺序不同 | grep `num_workers` 无 `worker_init_fn` | 固定 `worker_init_fn` + `generator`（附录 AC.3） |
 
 **【铁律】**：任一场景触发即记录到 `state/repro_history.jsonl`，用于自进化循环。
 

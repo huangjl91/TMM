@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """env_doctor.py — 复现环境预检 / 诊疗（preflight diagnostic）
 
-在跑 heavy 复现链（reproduce.py / reproduce.sh）之前，一次性扫描 13 类最常见阻断项，
+在跑 heavy 复现链（reproduce.py / reproduce.sh）之前，一次性扫描 16 类最常见阻断项，
 逐项给出 [OK / WARN / FAIL] 与可执行的修复命令，并回指对应附录条目（R-/Q/AB/AA）。
 只读诊断，不做任何破坏性修改；适合作为「确保所有情况都能解决」的第一道防线。
 
@@ -292,6 +292,54 @@ def check_fonts():
     return ("OK", "字体已固化: " + ", ".join(sorted(signals)), "")
 
 
+def check_jax_determinism():
+    """R-99: JAX/XLA 默认非确定性，dropout/attention 归约顺序随运行变化"""
+    files = collect_py_files()
+    uses_jax = any(("import jax" in read_text_safe(f)) or ("from jax" in read_text_safe(f)) for f in files)
+    if not uses_jax:
+        return (None, "", "")  # 无 JAX 则跳过
+    fixed = any(("jax.random.PRNGKey" in read_text_safe(f))
+               or ("jax_disable_most_optimizations" in read_text_safe(f))
+               or ("jax_enable_x64" in read_text_safe(f))
+               or ("jax.config.update" in read_text_safe(f))
+               for f in files)
+    if not fixed:
+        return ("WARN", "检测到 JAX 但未固化确定性设置（XLA 归约/PRNG 默认非确定性，R-99）",
+                "固定 `jax.random.PRNGKey(seed)` + `JAX_DISABLE_MOST_OPTIMIZATIONS=1` + `jax_enable_x64`（附录 AC）")
+    return ("OK", "JAX 确定性设置已检测", "")
+
+
+def check_dataloader_workers():
+    """R-108: 并行 DataLoader 的 shuffle/worker 初始化随机致每轮数据顺序不同"""
+    files = collect_py_files()
+    hits = 0
+    for f in files:
+        t = read_text_safe(f)
+        if "num_workers" in t and "worker_init_fn" not in t:
+            hits += 1
+    if hits:
+        return ("WARN", f"{hits} 个文件用 num_workers>0 但无 worker_init_fn（DataLoader 顺序随机，R-108）",
+                "固定 `worker_init_fn` + `generator` + `torch.manual_seed`（附录 AC.3）")
+    return (None, "", "")  # 无 DataLoader 则跳过
+
+
+def check_case_collision():
+    """R-103: 大小写不敏感文件系统（macOS HFS+/APFS）致同名文件互相覆盖"""
+    bases = [ROOT / b for b in ("code", "scripts", "paper", "data", "figs") if (ROOT / b).is_dir()]
+    seen = {}
+    for base in bases:
+        for p in base.rglob("*"):
+            if p.is_file():
+                key = p.name.lower()
+                seen.setdefault(key, []).append(p.name)
+    dupes = {k: v for k, v in seen.items() if len(v) > 1}
+    if dupes:
+        detail = "; ".join(f"{k}→{','.join(v)}" for k, v in dupes.items())
+        return ("WARN", f"存在大小写冲突文件名（macOS 下会互相覆盖，R-103）: {detail}",
+                "统一小写文件名并消除大小写冲突（附录 AA.6）")
+    return ("OK", "未发现大小写冲突文件名", "")
+
+
 def main():
     ap = argparse.ArgumentParser(description="复现环境预检 / 诊疗")
     ap.add_argument("--json", action="store_true", help="输出机器可读 JSON 数组")
@@ -311,6 +359,9 @@ def main():
         check_bom_crlf(),
         check_timezone_locale(),
         check_fonts(),
+        check_jax_determinism(),
+        check_dataloader_workers(),
+        check_case_collision(),
     ]
     findings = [{"status": s, "msg": m, "fix": fx} for (s, m, fx) in raw if s is not None]
 
