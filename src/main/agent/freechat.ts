@@ -27,6 +27,7 @@ import type { FreeSendPayload } from '../../shared/types'
 
 /** 自由对话按会话各自记一个 controller，避免和教练的 turn 互相打断 */
 const controllers = new Map<number, AbortController>()
+export const isFreeChatBusy = (id: number): boolean => controllers.has(id)
 
 /** 历史比教练那边留短一点：自由问答多轮闲聊，没必要把 token 吃满 */
 const HISTORY_LIMIT = 20

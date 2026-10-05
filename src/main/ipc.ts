@@ -1,4 +1,11 @@
 import { ipcMain, BrowserWindow } from 'electron'
+import { createTutorial } from './tutorial'
+import { permanentlyDeleteSession } from './deleteSession'
+import { isBusy as isExperimentBusy } from './sandbox'
+import { isCoachBusy } from './agent/coach'
+import { isFreeChatBusy } from './agent/freechat'
+import { isCompiling } from './latex/compile'
+import { exportBackup, importBackup } from './backup'
 import { PROVIDERS } from './llm/presets'
 import { testConnection } from './llm/openai-compat'
 import { runtimeInfo } from './runtime'
@@ -13,6 +20,7 @@ import {
   listAiUsage,
   listRuns,
   listSessions,
+  setSessionDeleted,
   loadSettings,
   logAiUsage,
   MAX_PINNED_METHODS,
@@ -32,6 +40,9 @@ import { compilePaper, openPaperPdf, paperDraft, readPaperPdf, saveDraft, stopCo
 import { usageSummary } from './compliance/collect'
 import { exportUsagePdf, openUsagePdf, usagePdf } from './compliance/export'
 import { getGuidedState, handleGuidedAskAi, handleGuidedCategory, handleGuidedChoose, handleGuidedReanalyze, handleGuidedSync } from './guidedQuiz'
+import { handleTeachingFeedback } from './guidedQuiz'
+import { getPredictionLab, savePredictionPlan, runPredictionLab, savePredictionReflection } from './predictionLab'
+import type { PredictionLabPlan, PredictionLabState } from '../shared/predictionLab'
 import { methodById } from '../shared/methods'
 import { ERROR_ESCALATE_STREAK, errorGuide, plotDigest, plotHints, sameErrorStreak, type PlotAnswers } from '../shared/plots'
 import type { ArtifactContent, RunPayload, RunRecord } from '../shared/sandbox'
@@ -84,6 +95,10 @@ function view(): SettingsView {
 }
 
 export function registerIpc(): void {
+  ipcMain.handle(IPC.PredictionLabGet, (_e, sid: number, q: number) => getPredictionLab(sid, q))
+  ipcMain.handle(IPC.PredictionLabPlan, (_e, sid: number, q: number, plan: PredictionLabPlan) => savePredictionPlan(sid, q, plan))
+  ipcMain.handle(IPC.PredictionLabRun, (_e, sid: number, q: number) => runPredictionLab(sid, q))
+  ipcMain.handle(IPC.PredictionLabReflect, (_e, sid: number, q: number, runId: number, reflection: PredictionLabState['reflection']) => savePredictionReflection(sid, q, runId, reflection))
   ipcMain.handle(IPC.SettingsGet, () => view())
 
   ipcMain.handle(IPC.SettingsSave, (_e, input: unknown) => {
@@ -123,6 +138,18 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle(IPC.SessionList, () => listSessions())
+  ipcMain.handle(IPC.TutorialCreate, () => createTutorial())
+  ipcMain.handle(IPC.SessionDeletePermanently, (_event, id: number) => {
+    if (isExperimentBusy(id) || isCoachBusy(id) || isFreeChatBusy(id) || isCompiling(id)) throw new Error('请等待该案例的运行任务结束后再永久删除')
+    permanentlyDeleteSession(id)
+  })
+  ipcMain.handle(IPC.BackupExport, () => exportBackup())
+  ipcMain.handle(IPC.BackupImport, () => importBackup())
+  ipcMain.handle(IPC.SessionTrash, () => listSessions(true))
+  ipcMain.handle(IPC.SessionDelete, (_event, id: number, deleted: boolean) => {
+    if (typeof deleted !== 'boolean') throw new Error('删除操作格式不正确')
+    setSessionDeleted(id, deleted)
+  })
   ipcMain.handle(IPC.SessionGet, (_e, id: number) => (Number.isInteger(id) ? getSessionMessages(id) : []))
   ipcMain.handle(IPC.SessionIntake, (_e): Promise<IntakeResult | null> => intake())
   ipcMain.handle(IPC.SessionFiles, (_e, sessionId: unknown): SessionFileView[] => filesOf(needSession(sessionId)))
@@ -338,6 +365,13 @@ export function registerIpc(): void {
       pickedMeans: payload.pickedMeans,
       userNote: payload.userNote
     })
+  })
+
+  ipcMain.handle(IPC.GuidedTeaching, (_e, payload: { sessionId: number; questionIdx: number; step: 'intuition' | 'model_select' }) => {
+    const sid = needSession(payload?.sessionId)
+    if (!Number.isInteger(payload.questionIdx) || payload.questionIdx < 1 || payload.questionIdx > 12) throw new Error('无效的小问编号。')
+    if (payload.step !== 'intuition' && payload.step !== 'model_select') throw new Error('无效的教学步骤。')
+    return handleTeachingFeedback(sid, payload.questionIdx, payload.step)
   })
 
   ipcMain.handle(IPC.GuidedAskAi, (_e, payload: GuidedAskAiPayload): Promise<AiAdvice> => {

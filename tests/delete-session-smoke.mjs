@@ -1,0 +1,25 @@
+import { build } from 'esbuild'
+import assert from 'node:assert/strict'
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
+import { resolve, join } from 'node:path'
+await build({entryPoints:['tests/delete-session-harness.ts'],bundle:true,platform:'node',format:'esm',outfile:'.tmp/delete-session-harness.mjs',plugins:[{name:'fixture',setup(b){b.onResolve({filter:/^electron$/},()=>({path:'electron',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export const app={getPath:()=>process.env.TMM_DELETE_TEST};'}))}}]})
+process.env.TMM_DELETE_TEST=mkdtempSync(resolve('.tmp/delete-test-'))
+const h=await import('../.tmp/delete-session-harness.mjs')
+h.initDb(process.env.TMM_DELETE_TEST)
+const id=h.createSession('测试删除','test','test')
+const other=h.createSession('保留','test','test')
+h.appendMessage(id,'user','测试记录')
+const dir=join(process.env.TMM_DELETE_TEST,'workspaces',`session-${id}`)
+mkdirSync(dir,{recursive:true});writeFileSync(join(dir,'attachment.txt'),'fixture')
+assert.throws(()=>h.permanentlyDeleteSession(id),/已删除/)
+assert.throws(()=>h.permanentlyDeleteSession('../'),/编号/)
+assert.ok(existsSync(dir))
+h.setSessionDeleted(id,true)
+h.permanentlyDeleteSession(id)
+assert.equal(existsSync(dir),false)
+assert.equal(h.getDb().prepare('SELECT COUNT(*) AS n FROM messages WHERE session_id=?').get(id).n,0)
+assert.equal(h.listSessions(true).length,0)
+assert.equal(h.listSessions()[0].id,other)
+assert.throws(()=>h.setSessionDeleted(id,false),/不存在/)
+assert.throws(()=>h.permanentlyDeleteSession(id),/已删除/)
+console.log('PASS 仅回收区可永久删除、附件清除、关联记录级联清除、其他案例保留、无法恢复与重复删除保护')

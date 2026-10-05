@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Brain, ChartBar, FileText, HourglassMedium, Lightbulb, Lightning, ListBullets,
-  Package, PushPin, Robot, RocketLaunch, SpinnerGap, Target, TrendUp, UploadSimple, Warning
+  Package, PushPin, Robot, RocketLaunch, SpinnerGap, Target, UploadSimple, Warning
 } from '@phosphor-icons/react'
 import {
   GUIDED_STEPS,
@@ -13,20 +13,22 @@ import {
   type StepChoice
 } from '@shared/guidedQuiz'
 import type { QuestionView } from '@shared/questions'
-import type { ProblemFileContent } from '@shared/types'
+import type { ProblemFileContent, GuidedChoosePayload } from '@shared/types'
+import type { TeachingFeedback } from '@shared/teaching'
+import { DraftQueue } from '../lib/draftQueue'
 import { A4ProblemViewer } from './A4ProblemViewer'
 import { CandidateModelLecture } from './CandidateModelLecture'
+import { LearningTask } from './LearningTask'
+import { TutorialRoute } from './TutorialRoute'
+import { TUTORIAL_FILE } from '@shared/tutorial'
+import { PredictionLab } from './PredictionLab'
+import { isLearningStep, learningStepReady, readLearningNote, reviewLearning } from '@shared/learning'
 
 import type { DataFileProfile, SessionFileView } from '@shared/intake'
 import { buildRealDataPreviewCode, humanSize, isReadableTabularFile } from '@shared/intake'
-import {
-  buildPredictionBaselineCode,
-  interpretPredictionEvidence,
-  summarizePredictionEvidence,
-  type PredictionEvidenceSummary
-} from '@shared/prediction'
 
 interface Props {
+  onTutorial?: () => void
   sessionId: number | null
   questions: QuestionView[]
   files?: SessionFileView[]
@@ -44,6 +46,7 @@ export function GuidedQuizPanel({
   activeQuestionIdx,
   onSelectQuestion,
   onIntake,
+  onTutorial,
   intakeBusy,
   onSendToSandbox
 }: Props): ReactNode {
@@ -57,12 +60,16 @@ export function GuidedQuizPanel({
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
   const [sandboxRunning, setSandboxRunning] = useState(false)
   const [sandboxMessage, setSandboxMessage] = useState<{ ok: boolean; text: string } | null>(null)
-  const [predictionEvidence, setPredictionEvidence] = useState<PredictionEvidenceSummary | null>(null)
   const [generatedImgUrl, setGeneratedImgUrl] = useState<string | null>(null)
   const [reanalyzing, setReanalyzing] = useState(false)
   const [categoryUpdating, setCategoryUpdating] = useState(false)
   const [choiceSaving, setChoiceSaving] = useState(false)
   const [choiceStatus, setChoiceStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const [saveStatus, setSaveStatus] = useState('回答会在停笔后自动保存')
+  const [teaching, setTeaching] = useState<{ feedback: TeachingFeedback; note: string; key: string } | null>(null)
+  const [teachingBusy, setTeachingBusy] = useState(false)
+  const [draftQueue] = useState(() => new DraftQueue<GuidedChoosePayload, GuidedSessionState>((payload) => window.api.chooseGuidedStep(payload)))
+  const editRevision = useRef(0)
   const [problemFile, setProblemFile] = useState<ProblemFileContent | null>(null)
   const [pdfExpanded, setPdfExpanded] = useState(false)
   const [selectedDataRelPath, setSelectedDataRelPath] = useState('')
@@ -72,6 +79,49 @@ export function GuidedQuizPanel({
   const [yColumns, setYColumns] = useState<string[]>([])
 
   const currentQIdx = activeQuestionIdx > 0 ? activeQuestionIdx : 1
+  const scopeRef = useRef('')
+  scopeRef.current = `${sessionId}:${currentQIdx}`
+  const stepRef = useRef(activeStep)
+  stepRef.current = activeStep
+  const recoveryKey = (step: GuidedStep): string => `tmm-learning-draft:${sessionId}:${currentQIdx}:${step}`
+
+  useEffect(() => {
+    return () => { void draftQueue.flushAll() }
+  }, [draftQueue, sessionId, currentQIdx])
+
+  function restoreDraft(s: GuidedSessionState, step: GuidedStep): void {
+    const saved = s.choices[step]
+    setSelectedKey(saved?.pickedKey ?? '')
+    setUserNote(saved?.userNote ?? '')
+    setSaveStatus('已加载保存的回答')
+    setTeaching(null)
+    if (!isLearningStep(step)) return
+    try {
+      const raw = localStorage.getItem(recoveryKey(step))
+      if (!raw) return
+      const recovery = JSON.parse(raw) as { note: string; key: string; at: number; brief: string }
+      if (typeof recovery.note !== 'string' || recovery.brief !== s.questionBrief) return
+      const localNote = readLearningNote(recovery.note)
+      const storedNote = readLearningNote(saved?.userNote)
+      if (recovery.key === saved?.pickedKey && JSON.stringify(localNote.answers) === JSON.stringify(storedNote.answers) && localNote.hintLevel === storedNote.hintLevel) {
+        localStorage.removeItem(recoveryKey(step))
+        return
+      }
+      setUserNote(recovery.note)
+      setSelectedKey(recovery.key)
+      setSaveStatus('已恢复本地草稿，正在重新保存…')
+      const option = s.questions?.[step]?.options.find((o) => o.key === recovery.key)
+      const payload = { sessionId: sessionId!, questionIdx: currentQIdx, step, pickedKey: option?.key ?? '', pickedText: option?.text ?? '', pickedMeans: option?.means ?? '', userNote: recovery.note }
+      const scope = scopeRef.current
+      const revision = editRevision.current
+      draftQueue.schedule(recoveryKey(step), payload, (error, next) => {
+        try { if (!error && localStorage.getItem(recoveryKey(step)) === raw) localStorage.removeItem(recoveryKey(step)) } catch { /* 数据库写入已完成。 */ }
+        if (scopeRef.current !== scope || stepRef.current !== step || editRevision.current !== revision) return
+        setSaveStatus(error ? '保存失败，本地草稿仍保留；请点击保存重试' : '已自动保存')
+        if (next) setState(next)
+      })
+    } catch { setSaveStatus('本地恢复不可用，请及时保存草稿') }
+  }
 
   // 异步回读赛题真实 PDF 附件与文本内容
   useEffect(() => {
@@ -124,21 +174,25 @@ export function GuidedQuizPanel({
       return
     }
 
+    let active = true
+    setState(null)
+    setUserNote('')
+    setChoiceStatus(null)
     setSyncStatus(null)
     setGeneratedImgUrl(null)
     window.api
       .getGuidedState(sessionId, currentQIdx)
       .then((s) => {
+        if (!active) return
         setState(s)
         setActiveStep(s.currentStep)
-        const choice = s.choices[s.currentStep]
-        setSelectedKey(choice ? choice.pickedKey : '')
-        setUserNote(choice?.userNote ?? '')
+        restoreDraft(s, s.currentStep)
         setAiAdvice(null)
       })
       .catch((e: unknown) => {
         console.error('Failed to load guided state:', e)
       })
+    return () => { active = false }
   }, [sessionId, currentQIdx])
 
   const brief = state?.questionBrief || questions.find((q) => q.idx === currentQIdx)?.brief || ''
@@ -157,19 +211,6 @@ export function GuidedQuizPanel({
         yColumns
       })
     : null
-  const effectivePredictionCode = selectedDataFile && state?.categoryAssessment.active === 'prediction'
-    ? buildPredictionBaselineCode(selectedDataFile, {
-        sheetName: selectedSheet || null,
-        xColumn: xColumn || null,
-        targetColumn: yColumns[0] || null
-      })
-    : null
-  const predictionInterpretation = predictionEvidence ? interpretPredictionEvidence(predictionEvidence) : null
-
-  useEffect(() => {
-    setPredictionEvidence(null)
-  }, [sessionId, currentQIdx, selectedDataFile?.relPath, selectedSheet, xColumn, yColumns[0]])
-
   useEffect(() => {
     if (!selectedDataFile || !sessionId) {
       setDataProfile(null)
@@ -200,6 +241,7 @@ export function GuidedQuizPanel({
     if (!sessionId) return
     setReanalyzing(true)
     try {
+      await draftQueue.flushAll()
       const nextState = await window.api.reanalyzeGuided(sessionId, currentQIdx)
       setState(nextState)
       const prevChoice = nextState.choices[activeStep]
@@ -217,6 +259,7 @@ export function GuidedQuizPanel({
     if (!sessionId) return
     setCategoryUpdating(true)
     try {
+      await draftQueue.flushAll()
       const nextState = await window.api.setGuidedCategory({
         sessionId,
         questionIdx: currentQIdx,
@@ -236,10 +279,10 @@ export function GuidedQuizPanel({
 
   // 切换步骤时同步当前已选答案与建议
   const handleStepChange = (step: GuidedStep): void => {
+    void draftQueue.flush(recoveryKey(activeStep))
+    editRevision.current++
     setActiveStep(step)
-    const prev = state?.choices[step]
-    setSelectedKey(prev ? prev.pickedKey : '')
-    setUserNote(prev?.userNote ?? '')
+    if (state) restoreDraft(state, step)
     setAiAdvice(null)
     setChoiceStatus(null)
   }
@@ -281,18 +324,21 @@ export function GuidedQuizPanel({
 
     setChoiceSaving(true)
     setChoiceStatus(null)
+    const scope = scopeRef.current
 
     const choice: StepChoice = {
       pickedKey: opt.key,
       pickedText: opt.text,
       pickedMeans: opt.means,
-      userNote: userNote.trim() || undefined,
+      userNote: isLearningStep(activeStep)
+        ? JSON.stringify({ ...readLearningNote(userNote), submitted: true })
+        : userNote.trim() || undefined,
       timestamp: Date.now()
     }
 
     try {
       if (sessionId) {
-        const nextState = await window.api.chooseGuidedStep({
+        const nextState = await draftQueue.submit(recoveryKey(activeStep), {
           sessionId,
           questionIdx: currentQIdx,
           step: activeStep,
@@ -301,7 +347,16 @@ export function GuidedQuizPanel({
           pickedMeans: choice.pickedMeans,
           userNote: choice.userNote
         })
+        try { localStorage.removeItem(recoveryKey(activeStep)) } catch { /* 数据库写入已完成。 */ }
+        if (scopeRef.current !== scope) return
         setState(nextState)
+        if (isLearningStep(activeStep)) {
+          setUserNote(choice.userNote ?? '')
+          setSaveStatus('已提交并保存')
+          const feedback = reviewLearning(activeStep, readLearningNote(choice.userNote), choice.pickedKey)
+          setChoiceStatus({ ok: feedback.status === 'ready', text: feedback.message })
+          return // 留在当前页看反馈，由学生决定何时继续。
+        }
       } else {
         setState((prev) => {
           if (!prev) return prev
@@ -309,7 +364,7 @@ export function GuidedQuizPanel({
           return {
             ...prev,
             choices: nextChoices,
-            completed: GUIDED_STEPS.every((s) => Boolean(nextChoices[s.key]))
+            completed: GUIDED_STEPS.every((s) => learningStepReady(s.key, nextChoices[s.key]))
           }
         })
       }
@@ -325,11 +380,95 @@ export function GuidedQuizPanel({
         }, 120)
       }
     } catch (e) {
+      if (scopeRef.current !== scope) return
       console.error('Failed to save choice:', e)
       setChoiceStatus({ ok: false, text: `保存失败：${(e as Error).message || '请重试'}` })
     } finally {
       setChoiceSaving(false)
     }
+  }
+
+  // 草稿和提示等级一起保存；未提交的回答不会被后台算作完成。
+  const handleLearningEdit = (value: string, key = selectedKey): void => {
+    setUserNote(value)
+    setSelectedKey(key)
+    if (!sessionId || !state || !isLearningStep(activeStep)) return
+    const note = JSON.stringify({ ...readLearningNote(value), submitted: false })
+    setUserNote(note)
+    const storageKey = recoveryKey(activeStep)
+    const recovery = JSON.stringify({ note, key, at: Date.now(), brief: state.questionBrief })
+    let backedUp = true
+    try { localStorage.setItem(storageKey, recovery) } catch { backedUp = false }
+    setSaveStatus(backedUp ? '待自动保存（本地副本已保留）' : '待自动保存，本地恢复不可用，请勿关闭窗口')
+    const revision = ++editRevision.current
+    const scope = scopeRef.current
+    const step = activeStep
+    const option = curQ.options.find((o) => o.key === key)
+    draftQueue.schedule(storageKey, {
+      sessionId, questionIdx: currentQIdx, step,
+      pickedKey: option?.key ?? '', pickedText: option?.text ?? '', pickedMeans: option?.means ?? '', userNote: note
+    }, (error, next) => {
+      if (!error) {
+        try { if (localStorage.getItem(storageKey) === recovery) localStorage.removeItem(storageKey) } catch { /* 数据库已经保存。 */ }
+      }
+      if (scopeRef.current !== scope || stepRef.current !== step || editRevision.current !== revision) return
+      setSaveStatus(error ? (backedUp ? '自动保存失败，本地副本已保留；请点击保存重试' : '自动保存失败，请勿关闭窗口，点击保存重试') : '已自动保存')
+      if (next) setState(next)
+    })
+  }
+
+  const handleSaveLearningDraft = async (value: string): Promise<void> => {
+    if (!sessionId || choiceSaving) return
+    setUserNote(value)
+    setChoiceSaving(true)
+    setChoiceStatus(null)
+    const scope = scopeRef.current
+    const option = curQ.options.find((o) => o.key === selectedKey)
+    try {
+      const next = await draftQueue.submit(recoveryKey(activeStep), {
+        sessionId, questionIdx: currentQIdx, step: activeStep,
+        pickedKey: option?.key ?? '', pickedText: option?.text ?? '', pickedMeans: option?.means ?? '',
+        userNote: JSON.stringify({ ...readLearningNote(value), submitted: false })
+      })
+      try { localStorage.removeItem(recoveryKey(activeStep)) } catch { /* 数据库写入已完成。 */ }
+      if (scopeRef.current !== scope) return
+      setState(next)
+      setSaveStatus('已保存草稿')
+      setChoiceStatus({ ok: true, text: '草稿和提示进度已保存，提交后再检查是否可以继续。' })
+    } catch (error) {
+      if (scopeRef.current !== scope) return
+      setChoiceStatus({ ok: false, text: `保存失败：${(error as Error).message}` })
+    } finally {
+      setChoiceSaving(false)
+    }
+  }
+
+  const handleTeaching = async (): Promise<void> => {
+    if (!sessionId || !isLearningStep(activeStep) || teachingBusy || choiceSaving) return
+    const scope = scopeRef.current
+    const step = activeStep
+    const revision = editRevision.current
+    const note = JSON.stringify(readLearningNote(userNote))
+    const option = curQ.options.find((o) => o.key === selectedKey)
+    setTeachingBusy(true)
+    setChoiceStatus(null)
+    try {
+      // 请求前保存当前快照；AI 只读取后台已经保存的回答。
+      const next = await draftQueue.submit(recoveryKey(step), {
+        sessionId, questionIdx: currentQIdx, step, pickedKey: option?.key ?? '',
+        pickedText: option?.text ?? '', pickedMeans: option?.means ?? '', userNote: note
+      })
+      if (scopeRef.current === scope && stepRef.current === step && editRevision.current === revision) {
+        setState(next)
+        setSaveStatus('已保存，正在获取教学追问…')
+      }
+      const feedback = await window.api.teachingFeedback(sessionId, currentQIdx, step)
+      if (scopeRef.current !== scope || stepRef.current !== step) return
+      setTeaching({ feedback, note: JSON.stringify(readLearningNote(note).answers), key: selectedKey })
+      if (editRevision.current === revision) setSaveStatus('回答已保存')
+    } catch (error) {
+      if (scopeRef.current === scope && stepRef.current === step) setChoiceStatus({ ok: false, text: `追问未完成：${(error as Error).message}。可以继续填写或稍后重试。` })
+    } finally { setTeachingBusy(false) }
   }
 
   // 一键同步到任务卡
@@ -348,8 +487,8 @@ export function GuidedQuizPanel({
   }
 
   // 运行第四步的数据检查或预测基线代码
-  const handleRunVisualizationCode = async (mode: 'preview' | 'prediction' = 'preview'): Promise<void> => {
-    const code = mode === 'prediction' ? effectivePredictionCode : effectiveVisualizationCode
+  const handleRunVisualizationCode = async (): Promise<void> => {
+    const code = effectiveVisualizationCode
     if (!code) return
     if (onSendToSandbox) {
       onSendToSandbox(code)
@@ -359,7 +498,6 @@ export function GuidedQuizPanel({
     setSandboxRunning(true)
     setGeneratedImgUrl(null)
     setSandboxMessage(null)
-    if (mode === 'prediction') setPredictionEvidence(null)
     try {
       const run = await window.api.runCode({ sessionId, code })
       if (!run.ok) {
@@ -369,24 +507,16 @@ export function GuidedQuizPanel({
         })
         return
       }
-      const preferredName = mode === 'prediction' ? 'prediction_baseline.png' : 'real_data_preview.png'
+      const preferredName = 'real_data_preview.png'
       const firstImg = run.artifacts.find((a) => a.name === preferredName) ?? run.artifacts.find(
         (a) => Boolean(a.dataUrl) || a.name.endsWith('.png') || a.name.endsWith('.jpg')
       )
       if (firstImg?.dataUrl) {
         setGeneratedImgUrl(firstImg.dataUrl)
       }
-      if (mode === 'prediction' && run.artifacts.some((a) => a.name === 'model_evidence.json')) {
-        const evidenceFile = await window.api.readArtifact(sessionId, 'model_evidence.json')
-        if (evidenceFile.text) {
-          setPredictionEvidence(summarizePredictionEvidence(JSON.parse(evidenceFile.text)))
-        }
-      }
       setSandboxMessage({
         ok: true,
-        text: mode === 'prediction'
-          ? '模型比较已完成：滚动选模、独立测试、预测区间和 model_evidence.json 已写入本会话工作区。'
-          : '数据检查已完成：预览图和 evidence_manifest.json 已写入本会话工作区。'
+        text: '数据检查已完成：预览图和 evidence_manifest.json 已写入本会话工作区。'
       })
     } catch (e) {
       console.error('Run visualization failed:', e)
@@ -436,6 +566,7 @@ export function GuidedQuizPanel({
               return (
                 <button
                   key={q.idx}
+                  disabled={choiceSaving}
                   onClick={() => onSelectQuestion(q.idx)}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all ${
                     active
@@ -476,6 +607,7 @@ export function GuidedQuizPanel({
       ) : null}
 
       <div className="flex-1 space-y-4 p-5">
+        {files?.some((file) => file.name === TUTORIAL_FILE && file.digest.includes('教学合成数据')) ? <TutorialRoute step={activeStep} /> : null}
         {!state?.sourceReady ? (
           <div className="guided-start-card mx-auto mt-5 max-w-3xl rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
             <div className="flex items-start justify-between gap-5">
@@ -495,7 +627,8 @@ export function GuidedQuizPanel({
               <div><strong>2</strong><span><b>确认小问</b><small>逐问判断任务类型和数据</small></span></div>
               <div><strong>3</strong><span><b>开始建模</b><small>一次完成一个关键判断</small></span></div>
             </div>
-            <p className="guided-start-note">没有真实题目时，不生成模拟指标或论文结论。</p>
+            <p className="guided-start-note">真实题目使用你导入的数据；新手练习使用明确标注的合成教学数据，指标仍需实际运行。</p>
+            {onTutorial ? <button className="learning-next" disabled={intakeBusy} onClick={onTutorial}>从新手练习开始（合成教学数据）</button> : null}
           </div>
         ) : (
         <>
@@ -556,7 +689,7 @@ export function GuidedQuizPanel({
                   <span>发现判断不对：</span>
                   <select
                     value={state.categoryAssessment.overridden ? state.categoryAssessment.active : 'auto'}
-                    disabled={categoryUpdating}
+                    disabled={categoryUpdating || choiceSaving}
                     onChange={(e) => void handleCategoryChange(e.target.value as 'auto' | 'prediction' | 'optimization' | 'evaluation')}
                     className="rounded-md border border-white/10 bg-[#11151d] px-2 py-1 text-white outline-none focus:border-indigo-400"
                   >
@@ -677,11 +810,12 @@ export function GuidedQuizPanel({
         {/* 4阶梯度步进指示器 (4 Steps) */}
         <div className="grid grid-cols-4 gap-2">
           {GUIDED_STEPS.map((s) => {
-            const hasChoice = Boolean(state?.choices[s.key])
+            const hasChoice = learningStepReady(s.key, state?.choices[s.key])
             const isCur = activeStep === s.key
             return (
               <button
                 key={s.key}
+                disabled={choiceSaving}
                 onClick={() => handleStepChange(s.key)}
                 className={`flex flex-col rounded-xl border p-3 text-left transition-all ${
                   isCur
@@ -721,9 +855,9 @@ export function GuidedQuizPanel({
                 <p className="mt-1 text-xs text-white/45">{curQ.description}</p>
               ) : null}
             </div>
-            {state?.choices[activeStep] ? (
+            {state?.choices[activeStep]?.pickedKey ? (
               <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-300">
-                已确定：选 {state.choices[activeStep]?.pickedKey}
+                已记录：选 {state.choices[activeStep]?.pickedKey}
               </span>
             ) : null}
           </div>
@@ -735,7 +869,11 @@ export function GuidedQuizPanel({
               return (
                 <div
                   key={opt.key}
-                  onClick={() => setSelectedKey(opt.key)}
+                  onClick={() => {
+                    if (choiceSaving) return
+                    if (isLearningStep(activeStep)) handleLearningEdit(userNote, opt.key)
+                    else setSelectedKey(opt.key)
+                  }}
                   className={`group relative flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all ${
                     selected
                       ? 'border-sky-500 bg-sky-500/15 shadow-sm'
@@ -847,14 +985,25 @@ export function GuidedQuizPanel({
           </div>
 
           {/* 用户做决策与确认 */}
+          {isLearningStep(activeStep) ? <LearningTask
+            prediction={state?.categoryAssessment?.active === 'prediction'}
+            step={activeStep} value={userNote} savedValue={state?.choices[activeStep]?.userNote}
+            pickedKey={selectedKey} savedKey={state?.choices[activeStep]?.pickedKey}
+            busy={choiceSaving || categoryUpdating || reanalyzing} onChange={handleLearningEdit}
+            onSaveDraft={(value) => void handleSaveLearningDraft(value)}
+            saveStatus={saveStatus}
+            teaching={teaching?.feedback}
+            teachingStale={Boolean(teaching && (teaching.note !== JSON.stringify(readLearningNote(userNote).answers) || teaching.key !== selectedKey))}
+            teachingBusy={teachingBusy} onTeaching={() => void handleTeaching()}
+          /> : null}
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            <input
+            {!isLearningStep(activeStep) ? <input
               type="text"
               value={userNote}
               onChange={(e) => setUserNote(e.target.value)}
               placeholder="你的决策理由（可选，写一句话加深理解）"
               className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white outline-none placeholder:text-white/25 focus:border-sky-500"
-            />
+            /> : null}
             <button
               onClick={handleConfirmChoice}
               disabled={!selectedKey || choiceSaving}
@@ -862,10 +1011,17 @@ export function GuidedQuizPanel({
             >
               {choiceSaving
                 ? '正在保存…'
+                : isLearningStep(activeStep) ? '提交回答，查看反馈'
                 : activeStep === 'visualization'
                   ? '✓ 完成选择并查看解题蓝图'
                   : '✓ 确认选择并进入下一步'}
             </button>
+            {isLearningStep(activeStep) && learningStepReady(activeStep, state?.choices[activeStep]) &&
+              selectedKey === state?.choices[activeStep]?.pickedKey &&
+              userNote === state?.choices[activeStep]?.userNote ? <button
+                className="learning-next" disabled={choiceSaving}
+                onClick={() => handleStepChange(activeStep === 'intuition' ? 'model_select' : 'formulation')}
+              >我已阅读反馈，继续下一步 →</button> : null}
             {choiceStatus ? (
               <div
                 role="status"
@@ -882,7 +1038,11 @@ export function GuidedQuizPanel({
         </div>
 
         {/* 第 4 阶梯专属：【科研数据可视化与论文结论】专项面板 */}
-        {activeStep === 'visualization' && curQ.visualization ? (
+        {sessionId && state?.categoryAssessment.active === 'prediction' && (activeStep === 'formulation' || activeStep === 'visualization') ? <PredictionLab
+          key={`${sessionId}:${currentQIdx}`} sessionId={sessionId} questionIdx={currentQIdx} files={files ?? []}
+          thoughtSubmitted={learningStepReady('intuition', state.choices.intuition) && learningStepReady('model_select', state.choices.model_select)}
+        /> : null}
+        {activeStep === 'visualization' && curQ.visualization && state?.categoryAssessment.active !== 'prediction' ? (
           <div className="rounded-xl border border-emerald-500/30 bg-[#131b18] p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -896,23 +1056,13 @@ export function GuidedQuizPanel({
               </div>
               <div className="flex flex-wrap justify-end gap-2">
                 <button
-                  onClick={() => void handleRunVisualizationCode('preview')}
+                  onClick={() => void handleRunVisualizationCode()}
                   disabled={sandboxRunning || !effectiveVisualizationCode}
                   className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
                 >
                   {sandboxRunning ? <HourglassMedium size={14} /> : <RocketLaunch size={14} />}
                   <span>{sandboxRunning ? '正在沙箱中运行...' : '运行数据检查'}</span>
                 </button>
-                {state?.categoryAssessment.active === 'prediction' ? (
-                  <button
-                    onClick={() => void handleRunVisualizationCode('prediction')}
-                    disabled={sandboxRunning || !effectivePredictionCode}
-                    className="flex items-center gap-1.5 rounded-lg border border-sky-400/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-100 hover:bg-sky-500/25 disabled:opacity-50"
-                  >
-                    <TrendUp size={14} />
-                    <span>{sandboxRunning ? '正在沙箱中运行...' : '运行模型比较'}</span>
-                  </button>
-                ) : null}
               </div>
             </div>
 
@@ -925,15 +1075,6 @@ export function GuidedQuizPanel({
                 当前代码读取：{selectedDataFile?.relPath}
               </div>
             )}
-
-            {state?.categoryAssessment.active === 'prediction' ? (
-              <div className="rounded-lg border border-violet-400/25 bg-violet-500/[0.07] px-3 py-2 text-xs text-violet-100">
-                <div className="font-semibold">本次预测如何选模型</div>
-                <div className="mt-1 text-violet-100/70">
-                  ① 训练段滚动验证选模型　→　② 独立测试集只做最终评估　→　③ 用训练段验证残差估计 80% / 95% 预测区间
-                </div>
-              </div>
-            ) : null}
 
             {sandboxMessage ? (
               <div className={`rounded-lg border px-3 py-2 text-xs ${sandboxMessage.ok ? 'border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-200' : 'border-rose-500/25 bg-rose-500/[0.06] text-rose-200'}`}>
@@ -981,9 +1122,6 @@ export function GuidedQuizPanel({
                     {dataProfile ? (
                       <div className="mt-2 text-[11px] text-white/40">
                         共 {dataProfile.rowCount} 行；运行数据检查会生成 evidence_manifest.json。
-                        {state?.categoryAssessment.active === 'prediction'
-                          ? ` 模型比较使用“${yColumns[0] || '尚未选择'}”作为目标，并生成 model_evidence.json。`
-                          : ''}
                       </div>
                     ) : null}
                   </div>
@@ -1033,91 +1171,7 @@ export function GuidedQuizPanel({
                 {effectiveVisualizationCode ?? curQ.visualization.pythonCode}
               </pre>
             </details>
-            {effectivePredictionCode ? (
-              <details className="guided-code-disclosure rounded-lg border border-sky-500/20 bg-black/30 p-3 text-xs">
-                <summary className="cursor-pointer font-medium text-sky-200/70 hover:text-sky-100">
-                  查看可复现模型比较代码
-                </summary>
-                <pre className="guided-code-preview mt-2 max-h-56 overflow-auto rounded p-3 font-mono leading-relaxed">
-                  {effectivePredictionCode}
-                </pre>
-              </details>
-            ) : null}
 
-            {predictionEvidence ? (
-              <div className="space-y-3 rounded-lg border border-sky-500/25 bg-sky-500/[0.06] p-4 text-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-semibold text-sky-200">本次运行的模型证据</span>
-                  <span className="rounded bg-sky-500/15 px-2 py-1 text-sky-100">
-                    滚动验证按 {predictionEvidence.selectionMetric} 选择：{predictionEvidence.bestModel}
-                  </span>
-                </div>
-                <div className="text-white/55">
-                  模型选择仅使用训练段内部的 {predictionEvidence.selectionFolds} 折滚动时间验证；测试集只用于最终评估。
-                </div>
-                {predictionInterpretation ? (
-                  <div className={`rounded-lg border p-3 ${predictionInterpretation.status === 'acceptable' ? 'border-emerald-400/25 bg-emerald-500/[0.07]' : predictionInterpretation.status === 'caution' ? 'border-amber-400/25 bg-amber-500/[0.07]' : 'border-rose-400/25 bg-rose-500/[0.07]'}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-white">结果解读</span>
-                      <span className="rounded bg-black/20 px-2 py-1 font-semibold text-white">{predictionInterpretation.label}</span>
-                    </div>
-                    <div className="mt-2 space-y-1 text-white/75">
-                      {predictionInterpretation.reasons.map((reason) => <div key={reason}>依据：{reason}</div>)}
-                    </div>
-                    <div className="mt-2 space-y-1 text-white/70">
-                      {predictionInterpretation.nextActions.map((action) => <div key={action}>下一步：{action}</div>)}
-                    </div>
-                  </div>
-                ) : null}
-                <div className="grid gap-2 text-white/65 md:grid-cols-2">
-                  <div>训练：{predictionEvidence.trainRows} 行，{predictionEvidence.trainRange}</div>
-                  <div>测试：{predictionEvidence.testRows} 行，{predictionEvidence.testRange}</div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-left">
-                    <thead className="text-white/45">
-                      <tr><th className="py-1 pr-3">模型</th><th className="py-1 pr-3">MAE</th><th className="py-1 pr-3">RMSE</th><th className="py-1">MAPE</th></tr>
-                    </thead>
-                    <tbody className="text-white/80">
-                      {predictionEvidence.metrics.map((metric) => (
-                        <tr key={metric.model} className={metric.model === predictionEvidence.bestModel ? 'text-sky-200' : ''}>
-                          <td className="py-1 pr-3 font-mono">{metric.model}</td>
-                          <td className="py-1 pr-3">{metric.mae.toFixed(4)}</td>
-                          <td className="py-1 pr-3">{metric.rmse.toFixed(4)}</td>
-                          <td className="py-1">{metric.mape === null ? '不适用' : `${metric.mape.toFixed(3)}%`}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {predictionEvidence.intervals.length ? (
-                  <div className="grid gap-2 md:grid-cols-2">
-                    {predictionEvidence.intervals.map((interval) => (
-                      <div key={interval.level} className="rounded border border-sky-400/15 bg-black/20 p-3">
-                        <div className="font-semibold text-sky-100">{Math.round(interval.level * 100)}% 经验预测区间</div>
-                        <div className="mt-1 text-white/65">半宽：±{interval.halfWidth.toFixed(4)}</div>
-                        <div className="text-white/65">测试覆盖率：{(interval.coverage * 100).toFixed(1)}%</div>
-                        {interval.coverage < interval.level ? (
-                          <div className="mt-1 text-amber-300">低于标称水平，需要谨慎解释</div>
-                        ) : (
-                          <div className="mt-1 text-emerald-300">达到本测试集的标称水平</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="rounded border border-white/10 bg-black/25 p-3 text-white/70">
-                  <div className="mb-1 font-semibold text-white/80">学生结果填写框架</div>
-                  <p>请依次说明：① 为什么采用时间顺序留出测试；② 各模型在同一测试集上的指标差异；③ 为什么按 {predictionEvidence.selectionMetric} 选择 {predictionEvidence.bestModel}；④ 80%/95% 区间覆盖了多少测试点，是否达到标称水平；⑤ 从残差图观察到的偏差和当前方法局限。数字必须引用上表及 model_evidence.json。</p>
-                </div>
-                {predictionInterpretation ? (
-                  <div className="rounded border border-violet-400/20 bg-violet-500/[0.06] p-3 text-white/70">
-                    <div className="mb-1 font-semibold text-violet-200">你需要能回答</div>
-                    {predictionInterpretation.reflectionQuestions.map((question) => <div key={question}>• {question}</div>)}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         ) : null}
 

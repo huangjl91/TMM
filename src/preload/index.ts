@@ -37,6 +37,12 @@ const api = {
   testProvider: (baseUrl: string, model: string, apiKey?: string): Promise<TestResult> =>
     ipcRenderer.invoke(IPC.ProviderTest, baseUrl, model, apiKey),
   listSessions: (): Promise<SessionSummary[]> => ipcRenderer.invoke(IPC.SessionList),
+  createTutorial: (): Promise<number> => ipcRenderer.invoke(IPC.TutorialCreate),
+  exportBackup: (): Promise<string | null> => ipcRenderer.invoke(IPC.BackupExport),
+  importBackup: (): Promise<number | null> => ipcRenderer.invoke(IPC.BackupImport),
+  listDeletedSessions: (): Promise<SessionSummary[]> => ipcRenderer.invoke(IPC.SessionTrash),
+  setSessionDeleted: (id: number, deleted: boolean): Promise<void> => ipcRenderer.invoke(IPC.SessionDelete, id, deleted),
+  permanentlyDeleteSession: (id: number): Promise<void> => ipcRenderer.invoke(IPC.SessionDeletePermanently, id),
   getSession: (id: number): Promise<StoredMessage[]> => ipcRenderer.invoke(IPC.SessionGet, id),
   intake: (): Promise<IntakeResult | null> => ipcRenderer.invoke(IPC.SessionIntake),
   listFiles: (sessionId: number): Promise<SessionFileView[]> => ipcRenderer.invoke(IPC.SessionFiles, sessionId),
@@ -93,6 +99,16 @@ const api = {
   exportUsagePdf: (sessionId: number): Promise<UsageExportResult> => ipcRenderer.invoke(IPC.UsageExport, sessionId),
   getGuidedState: (sessionId: number, questionIdx: number): Promise<GuidedSessionState> =>
     ipcRenderer.invoke(IPC.GuidedGet, { sessionId, questionIdx }),
+  teachingFeedback: (sessionId: number, questionIdx: number, step: string): Promise<import('../shared/teaching').TeachingFeedback> =>
+    ipcRenderer.invoke(IPC.GuidedTeaching, { sessionId, questionIdx, step }),
+  getPredictionLab: (sessionId: number, questionIdx: number): Promise<import('../shared/predictionLab').PredictionLabState> =>
+    ipcRenderer.invoke(IPC.PredictionLabGet, sessionId, questionIdx),
+  savePredictionPlan: (sessionId: number, questionIdx: number, plan: import('../shared/predictionLab').PredictionLabPlan): Promise<import('../shared/predictionLab').PredictionLabState> =>
+    ipcRenderer.invoke(IPC.PredictionLabPlan, sessionId, questionIdx, plan),
+  runPredictionLab: (sessionId: number, questionIdx: number): Promise<import('../shared/predictionLab').PredictionLabState> =>
+    ipcRenderer.invoke(IPC.PredictionLabRun, sessionId, questionIdx),
+  savePredictionReflection: (sessionId: number, questionIdx: number, runId: number, reflection: import('../shared/predictionLab').PredictionLabState['reflection']): Promise<import('../shared/predictionLab').PredictionLabState> =>
+    ipcRenderer.invoke(IPC.PredictionLabReflect, sessionId, questionIdx, runId, reflection),
   chooseGuidedStep: (payload: GuidedChoosePayload): Promise<GuidedSessionState> =>
     ipcRenderer.invoke(IPC.GuidedChoose, payload),
   askGuidedAdvice: (payload: GuidedAskAiPayload): Promise<AiAdvice> =>

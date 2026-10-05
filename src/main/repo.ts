@@ -51,12 +51,18 @@ export function renameSession(id: number, title: string): void {
   getDb().prepare('UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?').run(title.slice(0, 60), Date.now(), id)
 }
 
-export function listSessions(): SessionSummary[] {
+export function setSessionDeleted(id: number, deleted: boolean): void {
+  if (!Number.isInteger(id) || id < 1) throw new Error('案例编号无效')
+  const result = getDb().prepare('UPDATE sessions SET deleted_at = ? WHERE id = ?').run(deleted ? Date.now() : null, id)
+  if (!result.changes) throw new Error('案例不存在')
+}
+
+export function listSessions(deleted = false): SessionSummary[] {
   return getDb()
     .prepare(
       `SELECT s.id, s.title, s.model, s.created_at, s.updated_at,
               (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS n
-       FROM sessions s ORDER BY s.updated_at DESC LIMIT 50`
+       FROM sessions s WHERE s.deleted_at IS ${deleted ? 'NOT NULL' : 'NULL'} ORDER BY s.updated_at DESC`
     )
     .all()
     .map((r) => {
@@ -516,6 +522,15 @@ export function getGuidedChoices(
 export function clearGuidedChoices(sessionId: number, questionIdx: number): void {
   getDb().prepare('DELETE FROM guided_choices WHERE session_id = ? AND question_idx = ?').run(sessionId, questionIdx)
   touchSession(sessionId)
+}
+
+/** 上游思路改变后，下游决策需要重新核对；旧尝试仍保留在使用日志中。 */
+export function clearFollowingGuidedChoices(sessionId: number, questionIdx: number, step: string): void {
+  const steps = ['intuition', 'model_select', 'formulation', 'visualization']
+  const index = steps.indexOf(step)
+  if (index < 0) return
+  const remove = getDb().prepare('DELETE FROM guided_choices WHERE session_id = ? AND question_idx = ? AND step = ?')
+  for (const later of steps.slice(index + 1)) remove.run(sessionId, questionIdx, later)
 }
 
 export function saveGuidedChoice(

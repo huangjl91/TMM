@@ -38,7 +38,8 @@ const PROBE = [
 ].join('\n')
 
 function candidates(): PythonInvocation[] {
-  return process.platform === 'win32'
+  const localPython = join(app.getAppPath(), '.venv', process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'python.exe' : 'python')
+  const systemCandidates = process.platform === 'win32'
     ? [
         { command: 'py', args: ['-3.12'] },
         { command: 'py', args: ['-3.13'] },
@@ -50,6 +51,7 @@ function candidates(): PythonInvocation[] {
         { command: 'python3', args: [] },
         { command: 'python', args: [] }
       ]
+  return existsSync(localPython) ? [{ command: localPython, args: [] }, ...systemCandidates] : systemCandidates
 }
 
 function runProbe(inv: PythonInvocation, timeout: number): Promise<PyProbe> {

@@ -146,7 +146,14 @@ const MIGRATIONS: string[] = [
      elements_json  TEXT NOT NULL DEFAULT '{}',
      updated_at     INTEGER NOT NULL,
      PRIMARY KEY (session_id, question_idx)
-   );`
+   );`,
+  `CREATE TABLE prediction_labs (
+     session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+     question_idx INTEGER NOT NULL,
+     state_json TEXT NOT NULL,
+     PRIMARY KEY (session_id, question_idx)
+   );`,
+  `ALTER TABLE sessions ADD COLUMN deleted_at INTEGER;`
 ]
 
 export function initDb(dir: string): DatabaseSync {

@@ -614,6 +614,12 @@ export function App(): ReactNode {
             <SessionHistoryPanel
               sessions={sessions}
               activeId={sessionId}
+              dataPath={runtime?.dbPath}
+              busy={streaming || freeStreaming || intakeBusy}
+              onChanged={async (deletedId) => {
+                if (deletedId === sessionId) newSession()
+                await refreshSessions()
+              }}
               onSelect={(id) => {
                 void openSession(id).then(() => {
                   setActiveNav('path')
@@ -701,6 +707,17 @@ export function App(): ReactNode {
                   void onFocusQuestion(idx)
                 }}
                 onIntake={() => void onIntake()}
+                onTutorial={async () => {
+                  if (intakeBusy || streaming || freeStreaming) return
+                  setIntakeBusy(true)
+                  try {
+                    const id = await window.api.createTutorial()
+                    await refreshSessions()
+                    await openSession(id)
+                    setActiveNav('path'); setViewMode('guided')
+                  } catch (e) { setError(briefError(e)) }
+                  finally { setIntakeBusy(false) }
+                }}
                 intakeBusy={intakeBusy}
                 onSendToSandbox={(code) => {
                   setInjection({

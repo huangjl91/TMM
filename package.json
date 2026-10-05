@@ -37,6 +37,10 @@
     "smoke:explain": "esbuild src/shared/explain.ts --bundle --format=esm --platform=node --outfile=.tmp/explain.mjs --log-level=warning && esbuild src/shared/methods.ts --bundle --format=esm --platform=node --outfile=.tmp/methods.mjs --log-level=warning && node tests/explain-smoke.mjs",
     "smoke:plots": "esbuild src/shared/plots.ts --bundle --format=esm --platform=node --outfile=.tmp/plots.mjs --log-level=warning && node tests/plots-smoke.mjs",
     "smoke:guided": "esbuild src/shared/guidedQuiz.ts --bundle --format=esm --platform=node --outfile=.tmp/guidedQuiz.mjs --log-level=warning && node tests/guided-smoke.mjs",
+    "smoke:learning": "node tests/learning-smoke.mjs",
+    "smoke:backup": "node tests/backup-smoke.mjs",
+    "smoke:prediction-lab": "node tests/prediction-lab-smoke.mjs",
+    "smoke:teaching": "node tests/teaching-smoke.mjs",
     "smoke:ui:plot": "node tests/ui-probe.mjs plot"
   },
   "dependencies": {

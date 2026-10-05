@@ -55,6 +55,10 @@ function createWindow(): BrowserWindow {
   return win
 }
 
+// 正常开发与安装版共用固定历史目录；显式指定的测试目录继续隔离。
+if (!app.commandLine.hasSwitch('user-data-dir')) {
+  app.setPath('userData', join(app.getPath('appData'), 'math-modeling-tutor'))
+}
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()

@@ -29,6 +29,7 @@ import { plotDigest, plotGate } from '../../shared/plots'
 import { IPC, type SendPayload, type StoredMessage, type StreamEvent } from '../../shared/types'
 
 const controllers = new Map<number, AbortController>()
+export const isCoachBusy = (id: number): boolean => controllers.has(id)
 /** 历史别无限喂，长会话会把 token 吃光 */
 const HISTORY_LIMIT = 24
 
